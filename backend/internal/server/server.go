@@ -1,0 +1,87 @@
+package server
+
+import (
+	"net/http"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Arifinwidy02/splitmate-backend/internal/auth"
+	"github.com/Arifinwidy02/splitmate-backend/internal/balance"
+	"github.com/Arifinwidy02/splitmate-backend/internal/dashboard"
+	"github.com/Arifinwidy02/splitmate-backend/internal/expense"
+	"github.com/Arifinwidy02/splitmate-backend/internal/group"
+	"github.com/Arifinwidy02/splitmate-backend/internal/middleware"
+	"github.com/Arifinwidy02/splitmate-backend/internal/session"
+	"github.com/Arifinwidy02/splitmate-backend/internal/settlement"
+	"github.com/Arifinwidy02/splitmate-backend/internal/user"
+)
+
+type Dependencies struct {
+	Pool          *pgxpool.Pool
+	TokenService  *session.TokenService
+	SecureCookies bool
+}
+
+func New(deps Dependencies) http.Handler {
+	userRepo := user.NewRepository(deps.Pool)
+	authService := auth.NewService(userRepo)
+	authHandler := auth.NewHandler(authService, deps.TokenService, deps.SecureCookies)
+
+	groupRepo := group.NewRepository(deps.Pool)
+	groupService := group.NewService(groupRepo, userRepo)
+	groupHandler := group.NewHandler(groupService)
+
+	expenseRepo := expense.NewRepository(deps.Pool)
+	expenseService := expense.NewService(expenseRepo, groupRepo)
+	expenseHandler := expense.NewHandler(expenseService)
+
+	balanceRepo := balance.NewRepository(deps.Pool)
+	balanceService := balance.NewService(balanceRepo, groupRepo)
+	balanceHandler := balance.NewHandler(balanceService)
+
+	settlementRepo := settlement.NewRepository(deps.Pool)
+	settlementService := settlement.NewService(settlementRepo, groupRepo)
+	settlementHandler := settlement.NewHandler(settlementService)
+
+	dashboardRepo := dashboard.NewRepository(deps.Pool)
+	dashboardService := dashboard.NewService(dashboardRepo, groupRepo, balanceRepo)
+	dashboardHandler := dashboard.NewHandler(dashboardService)
+
+	requireAuth := middleware.RequireAuth(deps.TokenService)
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /health", handleHealth)
+
+	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
+	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
+	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
+	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(authHandler.Me)))
+
+	mux.Handle("POST /api/v1/groups", requireAuth(http.HandlerFunc(groupHandler.Create)))
+	mux.Handle("GET /api/v1/groups", requireAuth(http.HandlerFunc(groupHandler.List)))
+	mux.Handle("GET /api/v1/groups/{groupId}", requireAuth(http.HandlerFunc(groupHandler.Get)))
+	mux.Handle("PATCH /api/v1/groups/{groupId}", requireAuth(http.HandlerFunc(groupHandler.Update)))
+	mux.Handle("DELETE /api/v1/groups/{groupId}", requireAuth(http.HandlerFunc(groupHandler.Delete)))
+	mux.Handle("GET /api/v1/groups/{groupId}/members", requireAuth(http.HandlerFunc(groupHandler.ListMembers)))
+	mux.Handle("DELETE /api/v1/groups/{groupId}/members/{userId}", requireAuth(http.HandlerFunc(groupHandler.RemoveMember)))
+	mux.Handle("POST /api/v1/groups/{groupId}/invitations", requireAuth(http.HandlerFunc(groupHandler.CreateInvitation)))
+	mux.Handle("POST /api/v1/groups/invitations/{token}/accept", requireAuth(http.HandlerFunc(groupHandler.AcceptInvitation)))
+
+	mux.Handle("GET /api/v1/groups/{groupId}/expenses", requireAuth(http.HandlerFunc(expenseHandler.List)))
+	mux.Handle("POST /api/v1/groups/{groupId}/expenses", requireAuth(http.HandlerFunc(expenseHandler.Create)))
+	mux.Handle("GET /api/v1/expenses/{expenseId}", requireAuth(http.HandlerFunc(expenseHandler.Get)))
+	mux.Handle("PATCH /api/v1/expenses/{expenseId}", requireAuth(http.HandlerFunc(expenseHandler.Update)))
+	mux.Handle("DELETE /api/v1/expenses/{expenseId}", requireAuth(http.HandlerFunc(expenseHandler.Delete)))
+
+	mux.Handle("GET /api/v1/groups/{groupId}/balances", requireAuth(http.HandlerFunc(balanceHandler.GroupBalances)))
+	mux.Handle("GET /api/v1/groups/{groupId}/settlement-suggestions", requireAuth(http.HandlerFunc(balanceHandler.SettlementSuggestions)))
+	mux.Handle("GET /api/v1/me/balance", requireAuth(http.HandlerFunc(balanceHandler.PersonalBalance)))
+
+	mux.Handle("GET /api/v1/groups/{groupId}/settlements", requireAuth(http.HandlerFunc(settlementHandler.List)))
+	mux.Handle("POST /api/v1/groups/{groupId}/settlements", requireAuth(http.HandlerFunc(settlementHandler.Create)))
+
+	mux.Handle("GET /api/v1/dashboard", requireAuth(http.HandlerFunc(dashboardHandler.Get)))
+
+	return mux
+}
