@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -175,6 +176,35 @@ func (f *fakeStore) CreateInvitation(ctx context.Context, inv *Invitation) error
 	inv.CreatedAt = time.Now()
 	f.invites = append(f.invites, inv)
 	return nil
+}
+
+func (f *fakeStore) CreateInvitations(ctx context.Context, invites []*Invitation) ([]*Invitation, error) {
+	created := make([]*Invitation, 0, len(invites))
+	for _, inv := range invites {
+		inv.ID = uuid.New()
+		inv.CreatedAt = time.Now()
+		f.invites = append(f.invites, inv)
+		created = append(created, inv)
+	}
+	return created, nil
+}
+
+func (f *fakeStore) MembersByEmails(ctx context.Context, groupID uuid.UUID, emails []string) (map[string]bool, error) {
+	members := map[string]bool{}
+	for _, m := range f.members[groupID] {
+		members[m.Email] = true
+	}
+	return members, nil
+}
+
+func (f *fakeStore) PendingInvitationsByEmails(ctx context.Context, groupID uuid.UUID, emails []string) (map[string]bool, error) {
+	pending := map[string]bool{}
+	for _, inv := range f.invites {
+		if inv.GroupID == groupID && inv.Status == statusPending {
+			pending[inv.Email] = true
+		}
+	}
+	return pending, nil
 }
 
 func (f *fakeStore) FindInvitationByTokenHash(ctx context.Context, tokenHash string) (*Invitation, error) {
@@ -574,6 +604,118 @@ func TestCreateInvitation(t *testing.T) {
 	})
 
 	_ = token
+}
+
+func TestCreateBulkInvitations(t *testing.T) {
+	svc, store, users := newTestService()
+	owner := mustUUID(t)
+	member := mustUUID(t)
+
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	users.users[member] = &user.User{ID: member, Name: "Member", Email: "member@test.com"}
+	store.emails[member] = "member@test.com"
+	if err := svc.store.AddMember(context.Background(), group.ID, member, RoleMember); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	t.Run("member cannot invite", func(t *testing.T) {
+		_, _, err := svc.CreateBulkInvitations(context.Background(), member, group.ID, []string{"x@test.com"})
+		if !errors.Is(err, ErrForbidden) {
+			t.Fatalf("expected ErrForbidden, got %v", err)
+		}
+	})
+
+	t.Run("non-member cannot invite", func(t *testing.T) {
+		_, _, err := svc.CreateBulkInvitations(context.Background(), uuid.New(), group.ID, []string{"x@test.com"})
+		if !errors.Is(err, ErrGroupNotFound) {
+			t.Fatalf("expected ErrGroupNotFound, got %v", err)
+		}
+	})
+
+	t.Run("empty emails rejected", func(t *testing.T) {
+		_, _, err := svc.CreateBulkInvitations(context.Background(), owner, group.ID, nil)
+		if asValidationError(err) == nil {
+			t.Fatalf("expected validation error, got %v", err)
+		}
+	})
+
+	t.Run("too many emails rejected", func(t *testing.T) {
+		emails := make([]string, maxBulkInvites+1)
+		for i := range emails {
+			emails[i] = "user" + strconv.Itoa(i) + "@test.com"
+		}
+		_, _, err := svc.CreateBulkInvitations(context.Background(), owner, group.ID, emails)
+		if asValidationError(err) == nil {
+			t.Fatalf("expected validation error, got %v", err)
+		}
+	})
+
+	t.Run("invalid email rejected", func(t *testing.T) {
+		_, _, err := svc.CreateBulkInvitations(context.Background(), owner, group.ID, []string{"good@test.com", "not-an-email"})
+		if asValidationError(err) == nil {
+			t.Fatalf("expected validation error, got %v", err)
+		}
+	})
+
+	t.Run("mixed batch with skips", func(t *testing.T) {
+		results, failures, err := svc.CreateBulkInvitations(context.Background(), owner, group.ID, []string{
+			"a@test.com",
+			"member@test.com",
+			"a@test.com",
+			"b@Test.com",
+		})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+
+		if len(results) != 2 {
+			t.Fatalf("expected 2 created invitations, got %d", len(results))
+		}
+		byEmail := map[string]BulkInvitationResult{}
+		for _, res := range results {
+			byEmail[res.Invitation.Email] = res
+			if res.Invitation.Status != statusPending {
+				t.Errorf("expected pending, got %q", res.Invitation.Status)
+			}
+			if res.Invitation.GroupID != group.ID {
+				t.Errorf("expected group %s, got %s", group.ID, res.Invitation.GroupID)
+			}
+			sum := sha256.Sum256([]byte(res.Token))
+			if res.Invitation.TokenHash != hex.EncodeToString(sum[:]) {
+				t.Errorf("token hash does not match token for %s", res.Invitation.Email)
+			}
+		}
+		if _, ok := byEmail["b@test.com"]; !ok {
+			t.Errorf("expected normalized email b@test.com to be created")
+		}
+
+		expectedFailures := map[string]string{
+			"member@test.com": ReasonMemberExists,
+			"a@test.com":      ReasonDuplicate,
+		}
+		if len(failures) != len(expectedFailures) {
+			t.Fatalf("expected %d failures, got %v", len(expectedFailures), failures)
+		}
+		for _, f := range failures {
+			if expectedFailures[f.Email] != f.Reason {
+				t.Errorf("expected failure %s=%s, got %s=%s", f.Email, expectedFailures[f.Email], f.Email, f.Reason)
+			}
+		}
+	})
+
+	t.Run("pending invitation skipped", func(t *testing.T) {
+		_, failures, err := svc.CreateBulkInvitations(context.Background(), owner, group.ID, []string{"a@test.com"})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		if len(failures) != 1 || failures[0].Email != "a@test.com" || failures[0].Reason != ReasonInvitationExists {
+			t.Fatalf("expected INVITATION_EXISTS for a@test.com, got %v", failures)
+		}
+	})
 }
 
 func TestAcceptInvitation(t *testing.T) {

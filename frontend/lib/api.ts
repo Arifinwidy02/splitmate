@@ -70,15 +70,6 @@ export type Settlement = {
   createdAt: string;
 };
 
-export type Invitation = {
-  id: string;
-  groupId: string;
-  email: string;
-  status: string;
-  expiresAt: string;
-  token: string;
-};
-
 export type DashboardData = {
   summary: {
     owedToUser: string;

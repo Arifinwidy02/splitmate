@@ -225,6 +225,25 @@ func (c *apiClient) inviteMember(groupID, email string) string {
 	return inv["token"].(string)
 }
 
+func (c *apiClient) bulkInvite(groupID string, emails []string) ([]string, map[string]string) {
+	c.t.Helper()
+	resp := c.expect(http.MethodPost, "/api/v1/groups/"+groupID+"/invitations/bulk", map[string]any{
+		"emails": emails,
+	}, http.StatusCreated)
+	data := resp["data"].(map[string]any)
+
+	var tokens []string
+	for _, inv := range data["invitations"].([]any) {
+		tokens = append(tokens, inv.(map[string]any)["token"].(string))
+	}
+	failures := map[string]string{}
+	for _, f := range data["failed"].([]any) {
+		fail := f.(map[string]any)
+		failures[fail["email"].(string)] = fail["reason"].(string)
+	}
+	return tokens, failures
+}
+
 func (c *apiClient) acceptInvitation(token string) string {
 	c.t.Helper()
 	resp := c.expect(http.MethodPost, "/api/v1/groups/invitations/"+token+"/accept", nil, http.StatusOK)
@@ -507,6 +526,52 @@ func TestAuthorization(t *testing.T) {
 	// A member cannot delete the group; only the admin can.
 	invitee.expect(http.MethodDelete, "/api/v1/groups/"+groupID, nil, http.StatusForbidden)
 	owner.expect(http.MethodDelete, "/api/v1/groups/"+groupID, nil, http.StatusOK)
+}
+
+// TestBulkInvite verifies bulk invitation creation and the mixed flow where
+// some invitees already have accounts and others register after.
+func TestBulkInvite(t *testing.T) {
+	alice := newClient(t)
+	aliceEmail := uniqueEmail("alice")
+	alice.register("Alice", aliceEmail)
+
+	bobEmail := uniqueEmail("bob")
+	charlieEmail := uniqueEmail("charlie")
+
+	groupID := alice.createGroup("Bulk Group")
+
+	// Charlie already has an account; Bob registers after the invite.
+	charlie := newClient(t)
+	charlie.register("Charlie", charlieEmail)
+
+	tokens, failures := alice.bulkInvite(groupID, []string{bobEmail, charlieEmail, aliceEmail, bobEmail})
+	if len(tokens) != 2 {
+		t.Fatalf("expected 2 tokens, got %d", len(tokens))
+	}
+	if failures[bobEmail] != "DUPLICATE" || failures[aliceEmail] != "MEMBER_EXISTS" {
+		t.Fatalf("unexpected failures: %v", failures)
+	}
+
+	// Bob registers after being invited, then joins with his token.
+	bob := newClient(t)
+	bob.register("Bob", bobEmail)
+	bob.acceptInvitation(tokens[0])
+
+	// Charlie already had an account and joins with his token.
+	charlie.acceptInvitation(tokens[1])
+
+	ids := alice.memberIDs(groupID)
+	if _, ok := ids[bobEmail]; !ok {
+		t.Fatalf("bob not a member")
+	}
+	if _, ok := ids[charlieEmail]; !ok {
+		t.Fatalf("charlie not a member")
+	}
+
+	// A regular member cannot bulk invite.
+	bob.expect(http.MethodPost, "/api/v1/groups/"+groupID+"/invitations/bulk", map[string]any{
+		"emails": []string{"x@test.com"},
+	}, http.StatusForbidden)
 }
 
 // TestFinancialValidation verifies the expense invariant end to end.

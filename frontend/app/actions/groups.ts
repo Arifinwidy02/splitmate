@@ -5,10 +5,16 @@ import { revalidatePath } from "next/cache";
 
 import { apiFetch } from "@/lib/server-api";
 import { getDict } from "@/lib/i18n";
-import type { GroupSummary, Invitation } from "@/lib/api";
+import type { GroupSummary } from "@/lib/api";
 
 export type ActionState = { error?: string } | undefined;
-export type InviteActionState = { error?: string; token?: string } | undefined;
+export type BulkInviteState =
+  | {
+      error?: string;
+      invitations?: { email: string; token: string }[];
+      failed?: { email: string; reason: string }[];
+    }
+  | undefined;
 
 async function errorMessage(err: unknown): Promise<ActionState> {
   const dict = await getDict();
@@ -49,29 +55,37 @@ export async function createGroup(
   redirect(`/groups/${groupId}?success=group-created`);
 }
 
-export async function inviteMember(
+export async function inviteMembers(
   groupId: string,
-  _state: InviteActionState,
+  _state: BulkInviteState,
   formData: FormData,
-): Promise<InviteActionState> {
-  const email = String(formData.get("email") ?? "").trim();
+): Promise<BulkInviteState> {
+  const raw = String(formData.get("emails") ?? "");
+  const emails = [
+    ...new Set(
+      raw
+        .split(/[\n,;]+/)
+        .map((email) => email.trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  if (emails.length === 0) {
+    const dict = await getDict();
+    return { error: dict.groups.inviteEmailsRequired };
+  }
 
   try {
-    const { invitation } = await apiFetch<{ invitation: Invitation }>(
-      `/api/v1/groups/${groupId}/invitations`,
+    return await apiFetch<BulkInviteState>(
+      `/api/v1/groups/${groupId}/invitations/bulk`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ emails }),
       },
     );
-    return { token: invitation.token };
   } catch (err) {
-    const dict = await getDict();
-    if (err instanceof Error) {
-      return { error: err.message };
-    }
-    return { error: dict.errors.somethingWentWrong };
+    return errorMessage(err);
   }
 }
 

@@ -478,6 +478,99 @@ func TestCreateInvitationHandlerNonAdmin(t *testing.T) {
 	}
 }
 
+func TestCreateBulkInvitationsHandler(t *testing.T) {
+	h, store, users := newTestHandler()
+	owner := uuid.New()
+	member := uuid.New()
+
+	g := createGroupIn(t, h, store, users, owner)
+
+	users.users[member] = &user.User{ID: member, Name: "Member", Email: "member@test.com"}
+	store.emails[member] = "member@test.com"
+	if err := h.service.store.AddMember(t.Context(), g.ID, member, RoleMember); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	t.Run("non-admin 403", func(t *testing.T) {
+		rec := doRequest(t, h.CreateBulkInvitations, http.MethodPost, "/groups/"+g.ID.String()+"/invitations/bulk", map[string]any{
+			"emails": []string{"x@test.com"},
+		}, member)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d (body: %s)", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("invalid emails 422", func(t *testing.T) {
+		rec := doRequest(t, h.CreateBulkInvitations, http.MethodPost, "/groups/"+g.ID.String()+"/invitations/bulk", map[string]any{
+			"emails": []string{"good@test.com", "not-an-email"},
+		}, owner)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected 422, got %d (body: %s)", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("creates invitations and reports skips", func(t *testing.T) {
+		rec := doRequest(t, h.CreateBulkInvitations, http.MethodPost, "/groups/"+g.ID.String()+"/invitations/bulk", map[string]any{
+			"emails": []string{"a@test.com", "member@test.com", "a@test.com", "b@Test.com"},
+		}, owner)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d (body: %s)", rec.Code, rec.Body.String())
+		}
+
+		var resp struct {
+			Data struct {
+				Invitations []struct {
+					Email     string    `json:"email"`
+					Status    string    `json:"status"`
+					ExpiresAt time.Time `json:"expiresAt"`
+					Token     string    `json:"token"`
+				} `json:"invitations"`
+				Failed []struct {
+					Email  string `json:"email"`
+					Reason string `json:"reason"`
+				} `json:"failed"`
+			} `json:"data"`
+		}
+		decodeData(t, rec, &resp)
+
+		if len(resp.Data.Invitations) != 2 {
+			t.Fatalf("expected 2 invitations, got %d", len(resp.Data.Invitations))
+		}
+		byEmail := map[string]string{}
+		for _, inv := range resp.Data.Invitations {
+			byEmail[inv.Email] = inv.Token
+			if inv.Status != "pending" {
+				t.Errorf("expected pending, got %q", inv.Status)
+			}
+			if inv.Token == "" {
+				t.Errorf("expected token for %s", inv.Email)
+			}
+			if !inv.ExpiresAt.After(time.Now()) {
+				t.Errorf("expected future expiry for %s", inv.Email)
+			}
+		}
+		if _, ok := byEmail["a@test.com"]; !ok {
+			t.Errorf("expected a@test.com in results")
+		}
+		if _, ok := byEmail["b@test.com"]; !ok {
+			t.Errorf("expected normalized b@test.com in results")
+		}
+
+		expectedFailures := map[string]string{
+			"member@test.com": ReasonMemberExists,
+			"a@test.com":      ReasonDuplicate,
+		}
+		if len(resp.Data.Failed) != len(expectedFailures) {
+			t.Fatalf("expected %d failures, got %v", len(expectedFailures), resp.Data.Failed)
+		}
+		for _, f := range resp.Data.Failed {
+			if expectedFailures[f.Email] != f.Reason {
+				t.Errorf("expected %s=%s, got %s=%s", f.Email, expectedFailures[f.Email], f.Email, f.Reason)
+			}
+		}
+	})
+}
+
 func TestAcceptInvitationHandler(t *testing.T) {
 	h, store, users := newTestHandler()
 	owner := uuid.New()

@@ -39,6 +39,22 @@ type inviteRequest struct {
 	Email string `json:"email"`
 }
 
+type bulkInviteRequest struct {
+	Emails []string `json:"emails"`
+}
+
+type bulkInvitationResponse struct {
+	Email     string    `json:"email"`
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	Token     string    `json:"token,omitempty"`
+}
+
+type invitationFailureResponse struct {
+	Email  string `json:"email"`
+	Reason string `json:"reason"`
+}
+
 type groupResponse struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
@@ -372,6 +388,50 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: inv.ExpiresAt,
 		Token:     token,
 	}}})
+}
+
+func (h *Handler) CreateBulkInvitations(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	groupID, ok := pathUUID(r, "groupId")
+	if !ok {
+		response.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid group id")
+		return
+	}
+
+	var req bulkInviteRequest
+	if err := response.DecodeJSON(w, r, &req); err != nil {
+		return
+	}
+
+	results, failures, err := h.service.CreateBulkInvitations(r.Context(), userID, groupID, req.Emails)
+	if err != nil {
+		h.writeGroupError(w, err)
+		return
+	}
+
+	invitations := make([]*bulkInvitationResponse, 0, len(results))
+	for _, res := range results {
+		invitations = append(invitations, &bulkInvitationResponse{
+			Email:     res.Invitation.Email,
+			Status:    res.Invitation.Status,
+			ExpiresAt: res.Invitation.ExpiresAt,
+			Token:     res.Token,
+		})
+	}
+	failed := make([]*invitationFailureResponse, 0, len(failures))
+	for _, f := range failures {
+		failed = append(failed, &invitationFailureResponse{Email: f.Email, Reason: f.Reason})
+	}
+
+	response.WriteJSON(w, http.StatusCreated, envelope{Data: struct {
+		Invitations []*bulkInvitationResponse    `json:"invitations"`
+		Failed      []*invitationFailureResponse `json:"failed"`
+	}{Invitations: invitations, Failed: failed}})
 }
 
 func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {

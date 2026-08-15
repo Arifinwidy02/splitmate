@@ -36,7 +36,24 @@ const (
 	invitationTTL     = 7 * 24 * time.Hour
 	maxDescriptionLen = 500
 	maxEmailLen       = 255
+	maxBulkInvites    = 50
 )
+
+const (
+	ReasonMemberExists     = "MEMBER_EXISTS"
+	ReasonInvitationExists = "INVITATION_EXISTS"
+	ReasonDuplicate        = "DUPLICATE"
+)
+
+type BulkInvitationResult struct {
+	Invitation *Invitation
+	Token      string
+}
+
+type InvitationFailure struct {
+	Email  string
+	Reason string
+}
 
 var currencyRe = regexp.MustCompile(`^[A-Z]{3}$`)
 
@@ -283,6 +300,88 @@ func (s *Service) CreateInvitation(ctx context.Context, userID, groupID uuid.UUI
 	}
 
 	return inv, token, nil
+}
+
+func (s *Service) CreateBulkInvitations(ctx context.Context, userID, groupID uuid.UUID, emails []string) ([]BulkInvitationResult, []InvitationFailure, error) {
+	if _, err := s.requireAdmin(ctx, groupID, userID); err != nil {
+		return nil, nil, err
+	}
+	if len(emails) == 0 {
+		return nil, nil, &apperror.Validation{Message: "Enter at least one email address"}
+	}
+	if len(emails) > maxBulkInvites {
+		return nil, nil, &apperror.Validation{Message: "At most 50 email addresses per request"}
+	}
+
+	normalized := make([]string, 0, len(emails))
+	for _, email := range emails {
+		email = normalizeEmail(email)
+		addr, err := mail.ParseAddress(email)
+		if err != nil || addr.Address != email || len(email) > maxEmailLen {
+			return nil, nil, &apperror.Validation{Message: "Enter valid email addresses"}
+		}
+		normalized = append(normalized, email)
+	}
+
+	unique := make([]string, 0, len(normalized))
+	seen := make(map[string]bool, len(normalized))
+	var failures []InvitationFailure
+	for _, email := range normalized {
+		if seen[email] {
+			failures = append(failures, InvitationFailure{Email: email, Reason: ReasonDuplicate})
+			continue
+		}
+		seen[email] = true
+		unique = append(unique, email)
+	}
+
+	members, err := s.store.MembersByEmails(ctx, groupID, unique)
+	if err != nil {
+		return nil, nil, fmt.Errorf("find members by emails: %w", err)
+	}
+	pending, err := s.store.PendingInvitationsByEmails(ctx, groupID, unique)
+	if err != nil {
+		return nil, nil, fmt.Errorf("find pending invitations by emails: %w", err)
+	}
+
+	tokens := make(map[string]string, len(unique))
+	invites := make([]*Invitation, 0, len(unique))
+	for _, email := range unique {
+		if members[email] {
+			failures = append(failures, InvitationFailure{Email: email, Reason: ReasonMemberExists})
+			continue
+		}
+		if pending[email] {
+			failures = append(failures, InvitationFailure{Email: email, Reason: ReasonInvitationExists})
+			continue
+		}
+
+		token, err := newInvitationToken()
+		if err != nil {
+			return nil, nil, fmt.Errorf("generate invitation token: %w", err)
+		}
+		tokens[email] = token
+		invites = append(invites, &Invitation{
+			GroupID:   groupID,
+			Email:     email,
+			InvitedBy: userID,
+			TokenHash: hashToken(token),
+			Status:    statusPending,
+			ExpiresAt: time.Now().Add(invitationTTL),
+		})
+	}
+
+	created, err := s.store.CreateInvitations(ctx, invites)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create invitations: %w", err)
+	}
+
+	results := make([]BulkInvitationResult, 0, len(created))
+	for _, inv := range created {
+		results = append(results, BulkInvitationResult{Invitation: inv, Token: tokens[inv.Email]})
+	}
+
+	return results, failures, nil
 }
 
 func (s *Service) AcceptInvitation(ctx context.Context, userID uuid.UUID, token string) (*Group, error) {

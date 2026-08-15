@@ -70,6 +70,7 @@ func New(deps Dependencies) http.Handler {
 	mux.Handle("GET /api/v1/groups/{groupId}/members", requireAuth(http.HandlerFunc(groupHandler.ListMembers)))
 	mux.Handle("DELETE /api/v1/groups/{groupId}/members/{userId}", requireAuth(http.HandlerFunc(groupHandler.RemoveMember)))
 	mux.Handle("POST /api/v1/groups/{groupId}/invitations", requireAuth(http.HandlerFunc(groupHandler.CreateInvitation)))
+	mux.Handle("POST /api/v1/groups/{groupId}/invitations/bulk", requireAuth(http.HandlerFunc(groupHandler.CreateBulkInvitations)))
 	mux.Handle("POST /api/v1/groups/invitations/{token}/accept", requireAuth(http.HandlerFunc(groupHandler.AcceptInvitation)))
 
 	mux.Handle("GET /api/v1/groups/{groupId}/expenses", requireAuth(http.HandlerFunc(expenseHandler.List)))
