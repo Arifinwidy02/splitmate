@@ -19,7 +19,12 @@ import SettlePanel from "@/components/settle-panel";
 import Toast from "@/components/toast";
 import { getCurrentUser } from "@/lib/auth";
 import { ApiError, apiFetch } from "@/lib/server-api";
-import { formatCurrency, formatDate, formatDateTime, formatSignedCurrency } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  formatSignedCurrency,
+} from "@/lib/format";
 import type {
   BalanceMember,
   ExpenseListItem,
@@ -62,7 +67,9 @@ export default async function GroupDetailPage({
       apiFetch<{ settlements: Suggestion[] }>(
         `/api/v1/groups/${id}/settlement-suggestions`,
       ),
-      apiFetch<{ settlements: Settlement[] }>(`/api/v1/groups/${id}/settlements`),
+      apiFetch<{ settlements: Settlement[] }>(
+        `/api/v1/groups/${id}/settlements`,
+      ),
     ]);
     group = g.group;
     members = m.members;
@@ -77,8 +84,11 @@ export default async function GroupDetailPage({
     throw err;
   }
 
-  const myBalance = balances.find((b) => b.userId === user.id)?.balance ?? "0.00";
-  const pendingSettlements = suggestions.filter((s) => s.fromUserId === user.id);
+  const myBalance =
+    balances.find((b) => b.userId === user.id)?.balance ?? "0.00";
+  const pendingSettlements = suggestions.filter(
+    (s) => s.fromUserId === user.id,
+  );
   const isAdmin = group.role === "admin";
 
   return (
@@ -105,12 +115,13 @@ export default async function GroupDetailPage({
               {group.name}
             </h1>
             <p className="text-sm text-slate-500">
-              {tr(dict.group.memberCount, { n: group.memberCount })} · {group.currency}
+              {tr(dict.group.memberCount, { n: group.memberCount })} ·{" "}
+              {group.currency}
               {group.description ? ` · ${group.description}` : ""}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
             <p className="text-xs text-slate-500">{dict.group.yourBalance}</p>
             <p
@@ -125,7 +136,13 @@ export default async function GroupDetailPage({
               {formatSignedCurrency(myBalance, group.currency)}
             </p>
           </div>
-          {isAdmin && <DeleteGroupButton groupId={group.id} groupName={group.name} dict={dict} />}
+          {isAdmin && (
+            <DeleteGroupButton
+              groupId={group.id}
+              groupName={group.name}
+              dict={dict}
+            />
+          )}
           <a
             href={`/api/v1/groups/${group.id}/export`}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
@@ -150,7 +167,10 @@ export default async function GroupDetailPage({
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
             <div className="flex items-center justify-between">
-              <h2 id="balances-heading" className="text-xl font-semibold text-slate-900">
+              <h2
+                id="balances-heading"
+                className="text-xl font-semibold text-slate-900"
+              >
                 {dict.group.balances}
               </h2>
               <span className="text-xs font-medium text-slate-400">
@@ -159,7 +179,9 @@ export default async function GroupDetailPage({
             </div>
 
             {balances.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">{dict.group.noMembers}</p>
+              <p className="mt-4 text-sm text-slate-500">
+                {dict.group.noMembers}
+              </p>
             ) : (
               <ul className="mt-4 flex flex-col">
                 {balances.map((b, i) => (
@@ -176,7 +198,9 @@ export default async function GroupDetailPage({
                       <p className="truncate text-sm font-medium text-slate-900">
                         {b.name}
                         {b.userId === user.id && (
-                          <span className="ml-1.5 text-xs font-normal text-slate-400">{dict.common.you}</span>
+                          <span className="ml-1.5 text-xs font-normal text-slate-400">
+                            {dict.common.you}
+                          </span>
                         )}
                       </p>
                     </div>
@@ -203,13 +227,19 @@ export default async function GroupDetailPage({
             aria-labelledby="expenses-heading"
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <h2 id="expenses-heading" className="text-xl font-semibold text-slate-900">
+            <h2
+              id="expenses-heading"
+              className="text-xl font-semibold text-slate-900"
+            >
               {dict.group.expenses}
             </h2>
 
             {expenses.length === 0 ? (
               <div className="py-8 text-center">
-                <CategoryIcon category="Other" className="mx-auto h-8 w-8 text-slate-300" />
+                <CategoryIcon
+                  category="Other"
+                  className="mx-auto h-8 w-8 text-slate-300"
+                />
                 <p className="mt-2 text-sm text-slate-500">
                   {dict.group.noExpenses}
                 </p>
@@ -225,7 +255,10 @@ export default async function GroupDetailPage({
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                        <CategoryIcon category={e.category} className="h-4 w-4" />
+                        <CategoryIcon
+                          category={e.category}
+                          className="h-4 w-4"
+                        />
                       </span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-slate-900">
@@ -246,7 +279,9 @@ export default async function GroupDetailPage({
                           href={`/api/v1/expenses/${e.id}/receipt`}
                           target="_blank"
                           rel="noreferrer"
-                          aria-label={tr(dict.group.viewReceipt, { description: e.description })}
+                          aria-label={tr(dict.group.viewReceipt, {
+                            description: e.description,
+                          })}
                           title={dict.group.viewReceiptTitle}
                           className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                         >
@@ -278,7 +313,10 @@ export default async function GroupDetailPage({
             aria-labelledby="add-expense-heading"
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <h2 id="add-expense-heading" className="text-xl font-semibold text-slate-900">
+            <h2
+              id="add-expense-heading"
+              className="text-xl font-semibold text-slate-900"
+            >
               {dict.group.addExpense}
             </h2>
             <div className="mt-4">
@@ -296,8 +334,14 @@ export default async function GroupDetailPage({
             aria-labelledby="settle-heading"
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <h2 id="settle-heading" className="flex items-center gap-2 text-xl font-semibold text-slate-900">
-              <HandCoins className="h-5 w-5 text-green-700" aria-hidden="true" />
+            <h2
+              id="settle-heading"
+              className="flex items-center gap-2 text-xl font-semibold text-slate-900"
+            >
+              <HandCoins
+                className="h-5 w-5 text-green-700"
+                aria-hidden="true"
+              />
               {dict.group.settleUp}
             </h2>
             <div className="mt-3">
@@ -331,7 +375,10 @@ export default async function GroupDetailPage({
             aria-labelledby="members-heading"
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <h2 id="members-heading" className="flex items-center gap-2 text-xl font-semibold text-slate-900">
+            <h2
+              id="members-heading"
+              className="flex items-center gap-2 text-xl font-semibold text-slate-900"
+            >
               <Users className="h-5 w-5 text-slate-400" aria-hidden="true" />
               {dict.group.members}
             </h2>
@@ -352,10 +399,14 @@ export default async function GroupDetailPage({
                       <p className="truncate text-sm font-medium text-slate-900">
                         {m.name}
                         {m.id === user.id && (
-                          <span className="ml-1.5 text-xs font-normal text-slate-400">{dict.common.you}</span>
+                          <span className="ml-1.5 text-xs font-normal text-slate-400">
+                            {dict.common.you}
+                          </span>
                         )}
                       </p>
-                      <p className="truncate text-xs text-slate-500">{m.email}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {m.email}
+                      </p>
                     </div>
                   </div>
                   {m.role === "admin" && (
@@ -369,7 +420,9 @@ export default async function GroupDetailPage({
 
             {isAdmin && (
               <div className="mt-4 border-t border-slate-100 pt-4">
-                <p className="text-sm font-medium text-slate-700">{dict.group.inviteMember}</p>
+                <p className="text-sm font-medium text-slate-700">
+                  {dict.group.inviteMember}
+                </p>
                 <div className="mt-2">
                   <InviteForm groupId={group.id} dict={dict} />
                 </div>
@@ -400,7 +453,10 @@ export default async function GroupDetailPage({
                       <span className="font-medium">{s.payerName}</span>{" "}
                       {dict.group.paid}{" "}
                       <span className="font-medium">{s.receiverName}</span>
-                      <span className="text-slate-400"> · {formatDateTime(s.settledAt)}</span>
+                      <span className="text-slate-400">
+                        {" "}
+                        · {formatDateTime(s.settledAt)}
+                      </span>
                     </p>
                     <span className="shrink-0 text-sm font-semibold text-slate-900">
                       {formatCurrency(s.amount)}
