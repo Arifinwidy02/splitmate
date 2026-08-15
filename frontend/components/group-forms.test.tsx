@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import CreateGroupForm from "./create-group-form";
 import JoinGroupForm from "./join-group-form";
+import { en } from "@/lib/i18n/en";
 
 const { createGroup, acceptInvitation } = vi.hoisted(() => ({
   createGroup: vi.fn(),
@@ -18,10 +19,10 @@ vi.mock("@/app/actions/groups", () => ({
 describe("CreateGroupForm", () => {
   it("submits name and defaults to IDR", async () => {
     const user = userEvent.setup();
-    render(<CreateGroupForm />);
+    render(<CreateGroupForm dict={en} />);
 
     await user.type(screen.getByLabelText("Group name"), "Bali Trip");
-    await user.click(screen.getByRole("button", { name: "Create group" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(createGroup).toHaveBeenCalledTimes(1);
     const [, formData] = createGroup.mock.calls[0];
@@ -33,10 +34,10 @@ describe("CreateGroupForm", () => {
     createGroup.mockImplementationOnce(async () => ({ error: "Name is required" }));
 
     const user = userEvent.setup();
-    render(<CreateGroupForm />);
+    render(<CreateGroupForm dict={en} />);
 
     await user.type(screen.getByLabelText("Group name"), "Trip");
-    await user.click(screen.getByRole("button", { name: "Create group" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Name is required");
   });
 });
@@ -44,10 +45,10 @@ describe("CreateGroupForm", () => {
 describe("JoinGroupForm", () => {
   it("submits the invitation token", async () => {
     const user = userEvent.setup();
-    render(<JoinGroupForm />);
+    render(<JoinGroupForm dict={en} />);
 
     await user.type(screen.getByLabelText("Invitation token"), "tok-123");
-    await user.click(screen.getByRole("button", { name: "Join group" }));
+    await user.click(screen.getByRole("button", { name: "Join" }));
 
     expect(acceptInvitation).toHaveBeenCalledTimes(1);
     const [, formData] = acceptInvitation.mock.calls[0];
@@ -58,10 +59,10 @@ describe("JoinGroupForm", () => {
     acceptInvitation.mockImplementationOnce(async () => ({ error: "Invalid token" }));
 
     const user = userEvent.setup();
-    render(<JoinGroupForm />);
+    render(<JoinGroupForm dict={en} />);
 
     await user.type(screen.getByLabelText("Invitation token"), "bad");
-    await user.click(screen.getByRole("button", { name: "Join group" }));
+    await user.click(screen.getByRole("button", { name: "Join" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid token");
   });

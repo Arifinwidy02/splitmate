@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Toast from "./toast";
+import { en } from "@/lib/i18n/en";
 
 const replace = vi.fn();
 
@@ -20,13 +21,13 @@ describe("Toast", () => {
   });
 
   it("renders nothing without a success param", () => {
-    const { container } = render(<Toast />);
+    const { container } = render(<Toast dict={en} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("renders the success message and dismisses on click", async () => {
     const user = userEvent.setup();
-    render(<Toast success="expense-added" />);
+    render(<Toast success="expense-added" dict={en} />);
 
     expect(screen.getByRole("status")).toHaveTextContent("Expense added successfully.");
 
@@ -38,7 +39,7 @@ describe("Toast", () => {
     vi.useFakeTimers();
     window.history.replaceState({}, "", "/groups?success=group-deleted");
 
-    render(<Toast success="group-deleted" />);
+    render(<Toast success="group-deleted" dict={en} />);
 
     expect(screen.getByRole("status")).toHaveTextContent("Group deleted.");
 
@@ -54,7 +55,7 @@ describe("Toast", () => {
   });
 
   it("ignores unknown success values", () => {
-    const { container } = render(<Toast success="nonsense" />);
+    const { container } = render(<Toast success="nonsense" dict={en} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

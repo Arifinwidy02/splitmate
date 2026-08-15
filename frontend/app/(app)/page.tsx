@@ -21,6 +21,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { apiFetch } from "@/lib/server-api";
 import { formatCurrency, formatDate, formatSignedCurrency } from "@/lib/format";
 import type { DashboardData } from "@/lib/api";
+import type { Dict } from "@/lib/i18n/id";
+import { getDict } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/tr";
 
 const CATEGORY_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   Accommodation: Home,
@@ -66,12 +69,18 @@ function SummaryCard({
   );
 }
 
-function CategoryChart({ categories, currency }: { categories: DashboardData["categories"]; currency: string }) {
+function CategoryChart({
+  categories,
+  currency,
+  dict,
+}: {
+  categories: DashboardData["categories"];
+  currency: string;
+  dict: Dict;
+}) {
   if (categories.length === 0) {
     return (
-      <p className="text-sm text-slate-500">
-        No expenses yet. Add your first expense to see spending by category.
-      </p>
+      <p className="text-sm text-slate-500">{dict.dashboard.noCategories}</p>
     );
   }
 
@@ -94,7 +103,7 @@ function CategoryChart({ categories, currency }: { categories: DashboardData["ca
             <div
               className="mt-1.5 h-2 rounded-full bg-slate-100"
               role="img"
-              aria-label={`${category}: ${pct}% of highest category`}
+              aria-label={tr(dict.dashboard.categoryAria, { category, pct })}
             >
               <div
                 className="h-2 rounded-full bg-green-600"
@@ -110,6 +119,7 @@ function CategoryChart({ categories, currency }: { categories: DashboardData["ca
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
+  const dict = await getDict();
   const { summary, groups, recentExpenses, categories } = await apiFetch<DashboardData>(
     "/api/v1/dashboard",
   );
@@ -121,10 +131,10 @@ export default async function DashboardPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-[32px] font-bold text-slate-900">
-            Welcome back, {user.name.split(" ")[0]}
+            {tr(dict.dashboard.welcome, { name: user.name.split(" ")[0] })}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Here&apos;s your spending at a glance.
+            {dict.dashboard.subtitle}
           </p>
         </div>
         <Link
@@ -132,27 +142,27 @@ export default async function DashboardPage() {
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
-          Add Expense
+          {dict.dashboard.addExpense}
         </Link>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
-          label="You are owed"
+          label={dict.dashboard.youAreOwed}
           amount={summary.owedToUser}
           currency="IDR"
           positive
           icon={ArrowDownCircle}
         />
         <SummaryCard
-          label="You owe"
+          label={dict.dashboard.youOwe}
           amount={summary.userOwes}
           currency="IDR"
           negative
           icon={ArrowUpCircle}
         />
-        <SummaryCard label="Net balance" amount={summary.netBalance} currency="IDR" icon={Scale} />
-        <SummaryCard label="Total expense" amount={summary.totalExpense} currency="IDR" icon={Wallet} />
+        <SummaryCard label={dict.dashboard.netBalance} amount={summary.netBalance} currency="IDR" icon={Scale} />
+        <SummaryCard label={dict.dashboard.totalExpense} amount={summary.totalExpense} currency="IDR" icon={Wallet} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -162,18 +172,18 @@ export default async function DashboardPage() {
         >
           <div className="flex items-center justify-between">
             <h2 id="recent-groups-heading" className="text-xl font-semibold text-slate-900">
-              Recent groups
+              {dict.dashboard.recentGroups}
             </h2>
             <Link href="/groups" className="inline-flex items-center gap-1 text-sm font-medium text-green-700 hover:underline">
-              View all <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              {dict.dashboard.viewAll} <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
           </div>
 
           <ul className="mt-4 flex flex-col">
             {groups.length === 0 ? (
               <EmptyHint
-                title="No groups yet."
-                body="Create your first group to start sharing expenses."
+                title={dict.dashboard.noGroupsTitle}
+                body={dict.dashboard.noGroupsBody}
               />
             ) : (
               groups.slice(0, 4).map((g, i) => (
@@ -193,7 +203,7 @@ export default async function DashboardPage() {
                       </span>
                       <div className="min-w-0">
                         <p className="truncate font-medium text-slate-900">{g.name}</p>
-                        <p className="text-sm text-slate-500">{g.memberCount} members</p>
+                        <p className="text-sm text-slate-500">{tr(dict.dashboard.memberCount, { n: g.memberCount })}</p>
                       </div>
                     </div>
                     <span
@@ -220,15 +230,15 @@ export default async function DashboardPage() {
         >
           <div className="flex items-center justify-between">
             <h2 id="recent-expenses-heading" className="text-xl font-semibold text-slate-900">
-              Recent expenses
+              {dict.dashboard.recentExpenses}
             </h2>
           </div>
 
           <ul className="mt-4 flex flex-col">
             {recentExpenses.length === 0 ? (
               <EmptyHint
-                title="No expenses yet."
-                body="Add your first expense to start tracking."
+                title={dict.dashboard.noExpensesTitle}
+                body={dict.dashboard.noExpensesBody}
               />
             ) : (
               recentExpenses.map((e, i) => (
@@ -266,14 +276,14 @@ export default async function DashboardPage() {
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
             <h2 id="balance-overview-heading" className="text-xl font-semibold text-slate-900">
-              Balance overview
+              {dict.dashboard.balanceOverview}
             </h2>
 
             <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <BalanceRow label="Owed to you" amount={summary.owedToUser} positive />
-              <BalanceRow label="You owe" amount={summary.userOwes} negative />
-              <BalanceRow label="Settled" amount={summary.settledAmount} neutral />
-              <BalanceRow label="Net balance" amount={summary.netBalance} />
+              <BalanceRow label={dict.dashboard.owedToYou} amount={summary.owedToUser} positive />
+              <BalanceRow label={dict.dashboard.youOwe} amount={summary.userOwes} negative />
+              <BalanceRow label={dict.dashboard.settled} amount={summary.settledAmount} neutral />
+              <BalanceRow label={dict.dashboard.netBalance} amount={summary.netBalance} />
             </dl>
           </section>
 
@@ -282,10 +292,10 @@ export default async function DashboardPage() {
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
             <h2 id="categories-heading" className="text-xl font-semibold text-slate-900">
-              Expense categories
+              {dict.dashboard.expenseCategories}
             </h2>
             <div className="mt-5">
-              <CategoryChart categories={categories} currency="IDR" />
+              <CategoryChart categories={categories} currency="IDR" dict={dict} />
             </div>
           </section>
         </div>

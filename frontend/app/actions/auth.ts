@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { API_URL } from "@/lib/api";
+import { getDict } from "@/lib/i18n";
 
 export type AuthActionState = { error?: string } | undefined;
 
@@ -50,7 +51,8 @@ export async function login(
   });
 
   if (!res.ok) {
-    return { error: await errorMessage(res, "Sign in failed. Please try again.") };
+    const dict = await getDict();
+    return { error: await errorMessage(res, dict.errors.signInFailed) };
   }
 
   await storeSessionFromResponse(res);
@@ -73,8 +75,9 @@ export async function register(
   });
 
   if (!res.ok) {
+    const dict = await getDict();
     return {
-      error: await errorMessage(res, "Registration failed. Please try again."),
+      error: await errorMessage(res, dict.errors.registrationFailed),
     };
   }
 

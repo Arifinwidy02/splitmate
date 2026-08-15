@@ -4,18 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Users } from "lucide-react";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/groups", label: "Groups", icon: Users },
-];
+import type { Dict } from "@/lib/i18n/id";
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export default function Sidebar() {
+export default function Sidebar({ dict }: { dict: Dict }) {
   const pathname = usePathname();
+
+  const navItems = [
+    { href: "/", label: dict.nav.dashboard, icon: LayoutDashboard },
+    { href: "/groups", label: dict.nav.groups, icon: Users },
+  ];
 
   return (
     <>
@@ -27,8 +29,8 @@ export default function Sidebar() {
           <span className="text-lg font-bold text-slate-900">SplitMate</span>
         </Link>
 
-        <nav className="mt-8 flex flex-col gap-1" aria-label="Main navigation">
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        <nav className="mt-8 flex flex-col gap-1" aria-label={dict.nav.mainNavigation}>
+          {navItems.map(({ href, label, icon: Icon }) => {
             const active = isActive(pathname, href);
             return (
               <Link
@@ -51,9 +53,9 @@ export default function Sidebar() {
 
       <nav
         className="fixed inset-x-0 bottom-0 z-20 flex border-t border-slate-200 bg-white lg:hidden"
-        aria-label="Main navigation"
+        aria-label={dict.nav.mainNavigation}
       >
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
             <Link

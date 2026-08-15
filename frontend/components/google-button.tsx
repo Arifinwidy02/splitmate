@@ -1,4 +1,4 @@
-export default function GoogleButton() {
+export default function GoogleButton({ label }: { label: string }) {
   return (
     <a
       href="/api/v1/auth/google"
@@ -22,7 +22,7 @@ export default function GoogleButton() {
           d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"
         />
       </svg>
-      Continue with Google
+      {label}
     </a>
   );
 }

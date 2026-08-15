@@ -8,6 +8,8 @@ export default function ConfirmDialog({
   title,
   message,
   confirmLabel,
+  pendingLabel,
+  cancelLabel,
   pending,
   onConfirm,
   onClose,
@@ -16,6 +18,8 @@ export default function ConfirmDialog({
   title: string;
   message: string;
   confirmLabel: string;
+  pendingLabel: string;
+  cancelLabel: string;
   pending: boolean;
   onConfirm: () => void;
   onClose: () => void;
@@ -72,7 +76,7 @@ export default function ConfirmDialog({
           disabled={pending}
           className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
         >
-          Cancel
+          {cancelLabel}
         </button>
         <button
           type="button"
@@ -80,7 +84,7 @@ export default function ConfirmDialog({
           disabled={pending}
           className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
         >
-          {pending ? "Deleting..." : confirmLabel}
+          {pending ? pendingLabel : confirmLabel}
         </button>
       </div>
     </dialog>

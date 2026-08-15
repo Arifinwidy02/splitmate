@@ -1,9 +1,12 @@
+import LanguageSwitcher from "@/components/language-switcher";
 import LogoutButton from "@/components/logout-button";
 import Sidebar from "@/components/sidebar";
 import { getCurrentUser } from "@/lib/auth";
+import { getDict } from "@/lib/i18n";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await getCurrentUser();
+  const dict = await getDict();
 
   return (
     <div className="min-h-full bg-slate-50">
@@ -11,10 +14,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-green-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
       >
-        Skip to content
+        {dict.auth.skipToContent}
       </a>
 
-      <Sidebar />
+      <Sidebar dict={dict} />
 
       <div className="flex min-h-full flex-col lg:pl-60">
         <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
@@ -32,7 +35,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <span className="text-sm font-medium text-slate-700">{user.name}</span>
           </div>
 
-          <LogoutButton />
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher current={dict.locale} />
+            <LogoutButton dict={dict} />
+          </div>
         </header>
 
         <main id="main" className="flex-1 px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
