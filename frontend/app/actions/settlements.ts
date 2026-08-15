@@ -5,15 +5,17 @@ import { revalidatePath } from "next/cache";
 
 import { apiFetch } from "@/lib/server-api";
 import { getCurrentUser } from "@/lib/auth";
+import { getDict } from "@/lib/i18n";
 import type { Settlement, User } from "@/lib/api";
 
 export type ActionState = { error?: string } | undefined;
 
 async function errorMessage(err: unknown): Promise<ActionState> {
+  const dict = await getDict();
   if (err instanceof Error) {
     return { error: err.message };
   }
-  return { error: "Something went wrong. Please try again." };
+  return { error: dict.errors.somethingWentWrong };
 }
 
 export async function createSettlement(

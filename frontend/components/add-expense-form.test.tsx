@@ -3,6 +3,7 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import AddExpenseForm from "./add-expense-form";
+import { en } from "@/lib/i18n/en";
 
 const { createExpense } = vi.hoisted(() => ({ createExpense: vi.fn() }));
 
@@ -28,7 +29,7 @@ function fillExpense(userEventInstance: UserEvent) {
 
 describe("AddExpenseForm", () => {
   it("defaults to equal split and the current user as payer/participant", () => {
-    render(<AddExpenseForm groupId="g-1" currency="IDR" members={members} user={user} />);
+    render(<AddExpenseForm groupId="g-1" currency="IDR" members={members} user={user} dict={en} />);
 
     expect(screen.getByLabelText("Paid by")).toHaveValue("u-me");
     expect(screen.getByRole("button", { name: "Split equally" })).toHaveAttribute(
@@ -41,7 +42,7 @@ describe("AddExpenseForm", () => {
 
   it("submits the expense with amount, participants and hidden fields", async () => {
     const userEventInstance = userEvent.setup();
-    render(<AddExpenseForm groupId="g-1" currency="IDR" members={members} user={user} />);
+    render(<AddExpenseForm groupId="g-1" currency="IDR" members={members} user={user} dict={en} />);
 
     await userEventInstance.type(screen.getByLabelText("Description"), "Dinner");
     await userEventInstance.type(screen.getByLabelText("Amount"), "150000");
@@ -62,7 +63,7 @@ describe("AddExpenseForm", () => {
 
   it("collects custom share amounts per selected participant", async () => {
     const userEventInstance = userEvent.setup();
-    render(<AddExpenseForm groupId="g-1" currency="IDR" members={members} user={user} />);
+    render(<AddExpenseForm groupId="g-1" currency="IDR" members={members} user={user} dict={en} />);
 
     await userEventInstance.click(screen.getByRole("button", { name: "Custom amounts" }));
     await userEventInstance.type(screen.getByLabelText("Description"), "Dinner");
@@ -86,7 +87,7 @@ describe("AddExpenseForm", () => {
     createExpense.mockImplementationOnce(async () => ({ error: "Splits do not add up" }));
 
     const userEventInstance = userEvent.setup();
-    render(<AddExpenseForm groupId="g-1" currency="IDR" members={members} user={user} />);
+    render(<AddExpenseForm groupId="g-1" currency="IDR" members={members} user={user} dict={en} />);
 
     await userEventInstance.type(screen.getByLabelText("Description"), "Dinner");
     await userEventInstance.type(screen.getByLabelText("Amount"), "150000");

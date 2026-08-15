@@ -5,13 +5,17 @@ import { Trash2 } from "lucide-react";
 
 import ConfirmDialog from "@/components/confirm-dialog";
 import { deleteGroup } from "@/app/actions/groups";
+import type { Dict } from "@/lib/i18n/id";
+import { tr } from "@/lib/i18n/tr";
 
 export default function DeleteGroupButton({
   groupId,
   groupName,
+  dict,
 }: {
   groupId: string;
   groupName: string;
+  dict: Dict;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -35,14 +39,16 @@ export default function DeleteGroupButton({
         className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
       >
         <Trash2 className="h-4 w-4" aria-hidden="true" />
-        Delete group
+        {dict.groups.deleteGroup}
       </button>
 
       <ConfirmDialog
         open={open}
-        title="Delete this group?"
-        message={`"${groupName}" and all its expenses will be permanently deleted. This cannot be undone.`}
-        confirmLabel="Delete group"
+        title={dict.group.deleteGroupTitle}
+        message={tr(dict.group.deleteGroupMessage, { name: groupName })}
+        confirmLabel={dict.group.deleteGroup}
+        pendingLabel={dict.common.deleting}
+        cancelLabel={dict.common.cancel}
         pending={pending}
         onConfirm={onConfirm}
         onClose={() => setOpen(false)}

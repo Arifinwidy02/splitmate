@@ -3,15 +3,16 @@
 import { useActionState } from "react";
 
 import { createGroup } from "@/app/actions/groups";
+import type { Dict } from "@/lib/i18n/id";
 
-export default function CreateGroupForm() {
+export default function CreateGroupForm({ dict }: { dict: Dict }) {
   const [state, action, pending] = useActionState(createGroup, undefined);
 
   return (
     <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="name" className="text-sm font-medium text-slate-700">
-          Group name
+          {dict.groups.groupName}
         </label>
         <input
           id="name"
@@ -19,28 +20,29 @@ export default function CreateGroupForm() {
           type="text"
           required
           maxLength={100}
-          placeholder="e.g. Bali Trip"
+          placeholder={dict.groups.groupNamePlaceholder}
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="description" className="text-sm font-medium text-slate-700">
-          Description <span className="font-normal text-slate-400">(optional)</span>
+          {dict.groups.description}{" "}
+          <span className="font-normal text-slate-400">{dict.common.optional}</span>
         </label>
         <input
           id="description"
           name="description"
           type="text"
           maxLength={500}
-          placeholder="e.g. Trip expenses"
+          placeholder={dict.groups.descriptionPlaceholder}
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="currency" className="text-sm font-medium text-slate-700">
-          Currency
+          {dict.groups.currency}
         </label>
         <select
           id="currency"
@@ -48,10 +50,10 @@ export default function CreateGroupForm() {
           defaultValue="IDR"
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
         >
-          <option value="IDR">IDR — Indonesian Rupiah</option>
-          <option value="USD">USD — US Dollar</option>
-          <option value="EUR">EUR — Euro</option>
-          <option value="SGD">SGD — Singapore Dollar</option>
+          <option value="IDR">{dict.groups.currencyIdr}</option>
+          <option value="USD">{dict.groups.currencyUsd}</option>
+          <option value="EUR">{dict.groups.currencyEur}</option>
+          <option value="SGD">{dict.groups.currencySgd}</option>
         </select>
       </div>
 
@@ -69,7 +71,7 @@ export default function CreateGroupForm() {
         disabled={pending}
         className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-60"
       >
-        {pending ? "Creating..." : "Create group"}
+        {pending ? dict.groups.creating : dict.groups.create}
       </button>
     </form>
   );

@@ -9,10 +9,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { apiFetch } from "@/lib/server-api";
 import { formatDate } from "@/lib/format";
 import type { GroupSummary } from "@/lib/api";
+import { getDict } from "@/lib/i18n";
+import { tr } from "@/lib/i18n/tr";
 
 export default async function GroupsPage({ searchParams }: PageProps<"/groups">) {
   const sp = await searchParams;
   const success = typeof sp.success === "string" ? sp.success : undefined;
+  const dict = await getDict();
 
   await getCurrentUser();
   const { groups } = await apiFetch<{ groups: GroupSummary[] }>("/api/v1/groups");
@@ -21,9 +24,9 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
     <div className="mx-auto w-full max-w-[1440px]">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[32px] font-bold text-slate-900">Groups</h1>
+          <h1 className="text-[32px] font-bold text-slate-900">{dict.groups.title}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Share expenses with friends, family, and teams.
+            {dict.groups.subtitle}
           </p>
         </div>
         <Link
@@ -31,7 +34,7 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
-          New group
+          {dict.groups.newGroup}
         </Link>
       </div>
 
@@ -41,15 +44,15 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
           className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2"
         >
           <h2 id="group-list-heading" className="text-xl font-semibold text-slate-900">
-            Your groups
+            {dict.groups.yourGroups}
           </h2>
 
           {groups.length === 0 ? (
             <div className="py-12 text-center">
               <Users className="mx-auto h-10 w-10 text-slate-300" aria-hidden="true" />
-              <p className="mt-3 font-medium text-slate-700">No groups yet.</p>
+              <p className="mt-3 font-medium text-slate-700">{dict.dashboard.noGroupsTitle}</p>
               <p className="mt-1 text-sm text-slate-500">
-                Create your first group to start sharing expenses.
+                {dict.dashboard.noGroupsBody}
               </p>
             </div>
           ) : (
@@ -70,7 +73,8 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
                       <div className="min-w-0">
                         <p className="truncate font-medium text-slate-900">{g.name}</p>
                         <p className="truncate text-sm text-slate-500">
-                          {g.memberCount} members · created {formatDate(g.createdAt)}
+                          {tr(dict.group.memberCount, { n: g.memberCount })} ·{" "}
+                          {tr(dict.groups.createdOn, { date: formatDate(g.createdAt) })}
                         </p>
                       </div>
                     </div>
@@ -80,7 +84,7 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
                   </Link>
                   {g.role === "admin" && (
                     <span className="shrink-0">
-                      <DeleteGroupButton groupId={g.id} groupName={g.name} />
+                      <DeleteGroupButton groupId={g.id} groupName={g.name} dict={dict} />
                     </span>
                   )}
                 </li>
@@ -96,10 +100,10 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
             <h2 id="create-group-heading" className="text-xl font-semibold text-slate-900">
-              Create a group
+              {dict.groups.createGroup}
             </h2>
             <div className="mt-4">
-              <CreateGroupForm />
+              <CreateGroupForm dict={dict} />
             </div>
           </section>
 
@@ -108,19 +112,19 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
             <h2 id="join-group-heading" className="text-xl font-semibold text-slate-900">
-              Join a group
+              {dict.groups.joinGroup}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Ask a group admin for an invitation token.
+              {dict.groups.joinSubtitle}
             </p>
             <div className="mt-4">
-              <JoinGroupForm />
+              <JoinGroupForm dict={dict} />
             </div>
           </section>
         </div>
       </div>
 
-      <Toast key={success} success={success} />
+      <Toast key={success} success={success} dict={dict} />
     </div>
   );
 }

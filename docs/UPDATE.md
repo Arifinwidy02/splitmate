@@ -4,6 +4,49 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
 
 ---
 
+## 2026-08-15 — i18n (ID/EN) + Input Amount Terformat
+
+### i18n Bahasa Indonesia (default) & Inggris
+
+- Mekanisme: cookie `lang` (`id`/`en`, default `id`) — tanpa segmen URL.
+  - Server component: `getLocale()`/`getDict()` di `lib/i18n/index.ts` (server-only, baca `cookies()`).
+  - Client component: terima `dict` sebagai prop dari halaman server (bukan context).
+  - `LanguageSwitcher` (client) di header app layout & pojok kartu login/register: set cookie + `router.refresh()`.
+  - `lib/i18n/tr.ts`: helper interpolasi placeholder `{name}` → `tr(dict.x.y, { name })`.
+- Kamus: `lib/i18n/id.ts` (ID) & `en.ts` (EN), `Dict = Omit<typeof id, "locale"> & { locale: Locale }`.
+  **Kendala Next.js**: objek dict TIDAK boleh berisi fungsi (ditolak saat di-pass ke client
+  component — "Functions cannot be passed directly to Client Components"); semua interpolasi
+  memakai template string + `tr()`.
+- Cakupan: dashboard, groups, group detail, expense form, settle panel, auth (login/register),
+  sidebar, not-found, error page, toast, server action fallback error, tombol aksi.
+- Keputusan: `formatCurrency`/`formatDate` tetap id-ID (uang mengikuti mata uang, bukan bahasa);
+  pesan error backend (Go `ApiError`) tetap Inggris.
+
+### Input Amount Terformat
+
+- `lib/amount.ts`: `parseAmountInput`, `formatAmountInput`, `nextAmountInputValue`.
+  - Heuristik parse: separator TERAKHIR dengan ≤2 digit di belakangnya = desimal; lainnya = pemisah ribuan.
+  - Format tampilan sesuai locale: `id` → "1.000,50" (titik ribuan), `en` → "1,000.50".
+- `components/amount-input.tsx`: input visible terformat (tanpa `name`) + hidden input `name`
+  berisi nilai mentah (mis. `"150000"`/`"1000.50"`) — backend tetap menerima angka polos.
+  Dipakai di `add-expense-form` (amount utama) & `settle-panel` (quick settle).
+- Split custom di expense form tetap input angka polos (belum terformat).
+
+### Perbaikan bug yang ditemukan saat verifikasi
+
+- `inviteMember` (server action) mengembalikan token di field `error` → tidak pernah dirender
+  sebagai elemen `<code>`; dikembalikan ke `{ token }`.
+- E2E: tombol `Create`/`Join` (dari dict), heading "Join a group", regex token `code` tidak
+  anchored (JSX whitespace), helper `newContext` dengan cookie `lang=en`.
+- `locale` pada kamus diberi `as const` agar tipe `Dict` valid.
+
+### Verifikasi
+
+- `tsc --noEmit`, `eslint`, `vitest` 55/55, `bun run build`, Playwright E2E 2/2 (main-flow)
+  — semua hijau.
+
+---
+
 ## 2026-08-15 — Hotfix: Google Sign-In gagal untuk user baru (production)
 
 - Gejala: login Google di production menampilkan "Google sign in failed.",

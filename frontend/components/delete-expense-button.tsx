@@ -5,15 +5,19 @@ import { Trash2 } from "lucide-react";
 
 import ConfirmDialog from "@/components/confirm-dialog";
 import { deleteExpense } from "@/app/actions/expenses";
+import type { Dict } from "@/lib/i18n/id";
+import { tr } from "@/lib/i18n/tr";
 
 export default function DeleteExpenseButton({
   groupId,
   expenseId,
   description,
+  dict,
 }: {
   groupId: string;
   expenseId: string;
   description: string;
+  dict: Dict;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -34,7 +38,7 @@ export default function DeleteExpenseButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={`Delete expense ${description}`}
+        aria-label={`${dict.group.deleteExpense} ${description}`}
         className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
       >
         <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -42,9 +46,11 @@ export default function DeleteExpenseButton({
 
       <ConfirmDialog
         open={open}
-        title="Delete this expense?"
-        message={`"${description}" will be removed and balances recalculated. This cannot be undone.`}
-        confirmLabel="Delete expense"
+        title={dict.group.deleteExpenseTitle}
+        message={tr(dict.group.deleteExpenseMessage, { description })}
+        confirmLabel={dict.group.deleteExpense}
+        pendingLabel={dict.common.deleting}
+        cancelLabel={dict.common.cancel}
         pending={pending}
         onConfirm={onConfirm}
         onClose={() => setOpen(false)}

@@ -4,8 +4,11 @@ import { useState } from "react";
 import { useActionState } from "react";
 
 import { createExpense } from "@/app/actions/expenses";
+import AmountInput from "@/components/amount-input";
 import { EXPENSE_CATEGORIES, type Member, type User } from "@/lib/api";
 import { toRFC3339 } from "@/lib/format";
+import type { Dict } from "@/lib/i18n/id";
+import { tr } from "@/lib/i18n/tr";
 
 function localDateTimeValue(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -19,11 +22,13 @@ export default function AddExpenseForm({
   currency,
   members,
   user,
+  dict,
 }: {
   groupId: string;
   currency: string;
   members: Member[];
   user: User;
+  dict: Dict;
 }) {
   const [state, action, pending] = useActionState(createExpense.bind(null, groupId), undefined);
 
@@ -49,7 +54,7 @@ export default function AddExpenseForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <label htmlFor="description" className="text-sm font-medium text-slate-700">
-            Description
+            {dict.expenseForm.description}
           </label>
           <input
             id="description"
@@ -57,29 +62,28 @@ export default function AddExpenseForm({
             type="text"
             required
             maxLength={255}
-            placeholder="e.g. Dinner at Warung"
+            placeholder={dict.expenseForm.descriptionPlaceholder}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="amount" className="text-sm font-medium text-slate-700">
-            Amount
+            {dict.expenseForm.amount}
           </label>
-          <input
+          <AmountInput
             id="amount"
             name="amount"
-            type="text"
+            locale={dict.locale}
             required
-            inputMode="decimal"
-            placeholder="0.00"
+            placeholder={dict.expenseForm.amountPlaceholder}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="category" className="text-sm font-medium text-slate-700">
-            Category
+            {dict.expenseForm.category}
           </label>
           <select
             id="category"
@@ -97,7 +101,7 @@ export default function AddExpenseForm({
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="paidBy" className="text-sm font-medium text-slate-700">
-            Paid by
+            {dict.expenseForm.paidBy}
           </label>
           <select
             id="paidBy"
@@ -115,7 +119,7 @@ export default function AddExpenseForm({
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="expenseDate" className="text-sm font-medium text-slate-700">
-            Date
+            {dict.expenseForm.date}
           </label>
           <input
             id="expenseDate"
@@ -133,12 +137,14 @@ export default function AddExpenseForm({
       <input type="hidden" name="currency" value={currency} />
 
       <fieldset>
-        <legend className="text-sm font-medium text-slate-700">Split method</legend>
+        <legend className="text-sm font-medium text-slate-700">
+          {dict.expenseForm.splitMethod}
+        </legend>
         <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
           {(
             [
-              ["equal", "Split equally"],
-              ["custom", "Custom amounts"],
+              ["equal", dict.expenseForm.splitEqually],
+              ["custom", dict.expenseForm.customAmounts],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -161,7 +167,9 @@ export default function AddExpenseForm({
       <input type="hidden" name="splitType" value={splitType} />
 
       <fieldset>
-        <legend className="text-sm font-medium text-slate-700">Split between</legend>
+        <legend className="text-sm font-medium text-slate-700">
+          {dict.expenseForm.splitBetween}
+        </legend>
         <ul className="mt-2 flex flex-col">
           {members.map((m, i) => (
             <li
@@ -184,7 +192,7 @@ export default function AddExpenseForm({
                   />
                   {m.name}
                   {m.id === user.id && (
-                    <span className="text-xs text-slate-400">(you)</span>
+                    <span className="text-xs text-slate-400">{dict.common.you}</span>
                   )}
                 </span>
                 {splitType === "custom" && selected.has(m.id) && (
@@ -196,8 +204,8 @@ export default function AddExpenseForm({
                     onChange={(e) =>
                       setCustomTotals((prev) => ({ ...prev, [m.id]: e.target.value }))
                     }
-                    placeholder="0.00"
-                    aria-label={`Share for ${m.name}`}
+                    placeholder={dict.expenseForm.amountPlaceholder}
+                    aria-label={tr(dict.expenseForm.shareFor, { name: m.name })}
                     className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
                   />
                 )}
@@ -209,14 +217,15 @@ export default function AddExpenseForm({
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="note" className="text-sm font-medium text-slate-700">
-          Note <span className="font-normal text-slate-400">(optional)</span>
+          {dict.expenseForm.note}{" "}
+          <span className="font-normal text-slate-400">{dict.common.optional}</span>
         </label>
         <input
           id="note"
           name="note"
           type="text"
           maxLength={1000}
-          placeholder="Anything to add?"
+          placeholder={dict.expenseForm.notePlaceholder}
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
         />
       </div>
@@ -235,7 +244,7 @@ export default function AddExpenseForm({
         disabled={pending}
         className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-60"
       >
-        {pending ? "Adding..." : "Add Expense"}
+        {pending ? dict.expenseForm.adding : dict.expenseForm.addExpense}
       </button>
     </form>
   );

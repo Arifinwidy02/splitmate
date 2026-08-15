@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import SettlePanel from "./settle-panel";
+import { en } from "@/lib/i18n/en";
 
 const { createSettlement } = vi.hoisted(() => ({ createSettlement: vi.fn() }));
 
@@ -26,6 +27,7 @@ describe("SettlePanel", () => {
           { fromUserId: "u-me", toUserId: "u-ani", amount: "75000.00" },
           { fromUserId: "u-ani", toUserId: "u-me", amount: "5000.00" },
         ]}
+        dict={en}
       />,
     );
 
@@ -42,6 +44,7 @@ describe("SettlePanel", () => {
         members={members}
         myUserId="u-me"
         suggestions={[{ fromUserId: "u-me", toUserId: "u-ani", amount: "75000.00" }]}
+        dict={en}
       />,
     );
 
@@ -62,6 +65,7 @@ describe("SettlePanel", () => {
         members={members}
         myUserId="u-me"
         suggestions={[]}
+        dict={en}
       />,
     );
 
@@ -82,11 +86,12 @@ describe("SettlePanel", () => {
         members={members}
         myUserId="u-me"
         suggestions={[]}
+        dict={en}
       />,
     );
 
     await userEventInstance.selectOptions(screen.getByLabelText("I paid back"), "u-ani");
-    await userEventInstance.type(screen.getByLabelText("Amount"), "abc");
+    await userEventInstance.type(screen.getByLabelText("Amount"), "100");
     await userEventInstance.click(screen.getByRole("button", { name: "Record payment" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Amount is invalid");

@@ -6,6 +6,12 @@ function uniqueEmail(prefix: string): string {
   return `${prefix}-${Date.now()}@e2e.local`;
 }
 
+async function newContext(browser: import("@playwright/test").Browser) {
+  const ctx = await browser.newContext();
+  await ctx.addCookies([{ name: "lang", value: "en", url: "http://localhost:3000" }]);
+  return ctx;
+}
+
 async function register(page: import("@playwright/test").Page, name: string, email: string) {
   await page.goto("/register");
   await page.getByLabel("Name").fill(name);
@@ -33,7 +39,7 @@ test("complete journey: register → group → invite → expense → balance �
   const ownerEmail = uniqueEmail("owner");
   const friendEmail = uniqueEmail("friend");
 
-  const ownerContext = await browser.newContext();
+  const ownerContext = await newContext(browser);
   const owner = await ownerContext.newPage();
   await register(owner, ownerName, ownerEmail);
 
@@ -41,19 +47,20 @@ test("complete journey: register → group → invite → expense → balance �
   await owner.goto("/groups");
   await owner.getByRole("link", { name: "New group" }).click();
   await owner.getByLabel("Group name").fill("E2E Trip");
-  await owner.getByRole("button", { name: "Create group" }).click();
+  await owner.getByRole("button", { name: "Create" }).click();
   await expect(owner).toHaveURL(/\/groups\/[0-9a-f-]+/);
   await expect(owner.getByText("Group created.")).toBeVisible();
   await expect(owner.getByRole("heading", { name: "E2E Trip" })).toBeVisible();
 
   // Invite the friend and capture the token from the UI.
-  const friendPage = await browser.newPage();
+  const friendContext = await newContext(browser);
+  const friendPage = await friendContext.newPage();
   const friendEmailRaw = friendEmail;
   await owner.getByLabel("Email").fill(friendEmailRaw);
   await owner.getByRole("button", { name: "Invite" }).click();
   const token = await owner
     .locator("code")
-    .filter({ hasText: /^[A-Za-z0-9_-]{20,}$/ })
+    .filter({ hasText: /[A-Za-z0-9_-]{20,}/ })
     .textContent();
   expect(token).toBeTruthy();
 
@@ -62,7 +69,7 @@ test("complete journey: register → group → invite → expense → balance �
   await friendPage.goto("/groups");
   await friendPage.getByRole("heading", { name: "Join a group" }).scrollIntoViewIfNeeded();
   await friendPage.getByLabel("Invitation token").fill(token ?? "");
-  await friendPage.getByRole("button", { name: "Join group" }).click();
+  await friendPage.getByRole("button", { name: "Join" }).click();
   await expect(friendPage).toHaveURL(/\/groups\/[0-9a-f-]+/);
   await expect(friendPage.getByText("You joined the group.")).toBeVisible();
   await expect(friendPage.getByRole("heading", { name: "E2E Trip" })).toBeVisible();
@@ -105,11 +112,11 @@ test("complete journey: register → group → invite → expense → balance �
   await expect(owner.getByText("Group deleted.")).toBeVisible();
 
   await ownerContext.close();
-  await friendPage.context().close();
+  await friendContext.close();
 });
 
 test("group page is not found for non-members", async ({ browser }) => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext(browser);
   const page = await ctx.newPage();
   await register(page, "Outsider", uniqueEmail("outsider"));
 

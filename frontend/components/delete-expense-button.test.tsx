@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import DeleteExpenseButton from "./delete-expense-button";
+import { en } from "@/lib/i18n/en";
 
 const { deleteExpense } = vi.hoisted(() => ({ deleteExpense: vi.fn() }));
 
@@ -18,6 +19,7 @@ describe("DeleteExpenseButton", () => {
         groupId="group-1"
         expenseId="expense-1"
         description="Makan bareng"
+        dict={en}
       />,
     );
 
@@ -35,6 +37,7 @@ describe("DeleteExpenseButton", () => {
         groupId="group-1"
         expenseId="expense-1"
         description="Makan bareng"
+        dict={en}
       />,
     );
 
@@ -53,6 +56,7 @@ describe("DeleteExpenseButton", () => {
         groupId="group-1"
         expenseId="expense-1"
         description="Makan bareng"
+        dict={en}
       />,
     );
 

@@ -5,8 +5,15 @@ import { useActionState } from "react";
 
 import { login, type AuthActionState } from "@/app/actions/auth";
 import GoogleButton from "@/components/google-button";
+import type { Dict } from "@/lib/i18n/id";
 
-export default function LoginForm({ initialError }: { initialError?: string }) {
+export default function LoginForm({
+  initialError,
+  dict,
+}: {
+  initialError?: string;
+  dict: Dict;
+}) {
   const [state, action, pending] = useActionState<AuthActionState, FormData>(
     login,
     initialError ? { error: initialError } : undefined,
@@ -17,7 +24,7 @@ export default function LoginForm({ initialError }: { initialError?: string }) {
       <form action={action} className="mt-6 flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="email" className="text-sm font-medium text-slate-700">
-          Email
+          {dict.auth.email}
         </label>
         <input
           id="email"
@@ -31,7 +38,7 @@ export default function LoginForm({ initialError }: { initialError?: string }) {
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="password" className="text-sm font-medium text-slate-700">
-          Password
+          {dict.auth.password}
         </label>
         <input
           id="password"
@@ -57,22 +64,22 @@ export default function LoginForm({ initialError }: { initialError?: string }) {
         disabled={pending}
         className="mt-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-60"
       >
-        {pending ? "Signing in..." : "Sign in"}
+        {pending ? dict.auth.signingIn : dict.auth.signIn}
       </button>
 
       <p className="text-center text-sm text-slate-500">
-        Don&apos;t have an account?{" "}
+        {dict.auth.noAccount}{" "}
         <Link href="/register" className="font-medium text-green-600 hover:underline">
-          Create one
+          {dict.auth.createOne}
         </Link>
       </p>
       </form>
       <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
         <span className="h-px flex-1 bg-slate-200" />
-        or
+        {dict.common.or}
         <span className="h-px flex-1 bg-slate-200" />
       </div>
-      <GoogleButton />
+      <GoogleButton label={dict.auth.continueWithGoogle} />
     </>
   );
 }

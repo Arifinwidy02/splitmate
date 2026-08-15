@@ -4,16 +4,18 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { apiFetch } from "@/lib/server-api";
+import { getDict } from "@/lib/i18n";
 import type { GroupSummary, Invitation } from "@/lib/api";
 
 export type ActionState = { error?: string } | undefined;
 export type InviteActionState = { error?: string; token?: string } | undefined;
 
 async function errorMessage(err: unknown): Promise<ActionState> {
+  const dict = await getDict();
   if (err instanceof Error) {
     return { error: err.message };
   }
-  return { error: "Something went wrong. Please try again." };
+  return { error: dict.errors.somethingWentWrong };
 }
 
 export async function createGroup(
@@ -59,10 +61,11 @@ export async function inviteMember(
     );
     return { token: invitation.token };
   } catch (err) {
+    const dict = await getDict();
     if (err instanceof Error) {
       return { error: err.message };
     }
-    return { error: "Something went wrong. Please try again." };
+    return { error: dict.errors.somethingWentWrong };
   }
 }
 
@@ -73,7 +76,8 @@ export async function acceptInvitation(
   const token = String(formData.get("token") ?? "").trim();
 
   if (!token) {
-    return { error: "Invitation token is required." };
+    const dict = await getDict();
+    return { error: dict.errors.tokenRequired };
   }
 
   let groupId = "";
