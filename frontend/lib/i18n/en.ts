@@ -115,6 +115,7 @@ export const en: Dict = {
     memberCount: "{n} members",
     yourBalance: "Your balance",
     addExpense: "Add Expense",
+    exportReport: "Export to Excel",
     balances: "Balances",
     updatedFrom: "Updated from expenses & settlements",
     noMembers: "No members yet.",

@@ -11,6 +11,7 @@ import (
 	"github.com/Arifinwidy02/splitmate-backend/internal/expense"
 	"github.com/Arifinwidy02/splitmate-backend/internal/group"
 	"github.com/Arifinwidy02/splitmate-backend/internal/middleware"
+	"github.com/Arifinwidy02/splitmate-backend/internal/report"
 	"github.com/Arifinwidy02/splitmate-backend/internal/session"
 	"github.com/Arifinwidy02/splitmate-backend/internal/settlement"
 	"github.com/Arifinwidy02/splitmate-backend/internal/user"
@@ -48,6 +49,10 @@ func New(deps Dependencies) http.Handler {
 	dashboardService := dashboard.NewService(dashboardRepo, groupRepo, balanceRepo)
 	dashboardHandler := dashboard.NewHandler(dashboardService)
 
+	reportRepo := report.NewRepository(deps.Pool)
+	reportService := report.NewService(reportRepo)
+	reportHandler := report.NewHandler(reportService)
+
 	requireAuth := middleware.RequireAuth(deps.TokenService)
 
 	mux := http.NewServeMux()
@@ -83,6 +88,8 @@ func New(deps Dependencies) http.Handler {
 	mux.Handle("GET /api/v1/groups/{groupId}/balances", requireAuth(http.HandlerFunc(balanceHandler.GroupBalances)))
 	mux.Handle("GET /api/v1/groups/{groupId}/settlement-suggestions", requireAuth(http.HandlerFunc(balanceHandler.SettlementSuggestions)))
 	mux.Handle("GET /api/v1/me/balance", requireAuth(http.HandlerFunc(balanceHandler.PersonalBalance)))
+
+	mux.Handle("GET /api/v1/groups/{groupId}/export", requireAuth(http.HandlerFunc(reportHandler.Export)))
 
 	mux.Handle("GET /api/v1/groups/{groupId}/settlements", requireAuth(http.HandlerFunc(settlementHandler.List)))
 	mux.Handle("POST /api/v1/groups/{groupId}/settlements", requireAuth(http.HandlerFunc(settlementHandler.Create)))

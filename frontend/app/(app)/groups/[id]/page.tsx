@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
+  FileDown,
   HandCoins,
   Paperclip,
   Plus,
@@ -125,6 +126,13 @@ export default async function GroupDetailPage({
             </p>
           </div>
           {isAdmin && <DeleteGroupButton groupId={group.id} groupName={group.name} dict={dict} />}
+          <a
+            href={`/api/v1/groups/${group.id}/export`}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            <FileDown className="h-4 w-4" aria-hidden="true" />
+            {dict.group.exportReport}
+          </a>
           <a
             href="#add-expense"
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"

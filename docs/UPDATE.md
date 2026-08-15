@@ -96,8 +96,8 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
     "Receipt image is empty" / "... at most 5MB" / "Receipt must be a JPEG, PNG,
     WebP or GIF image".
   - Endpoint baru `GET /api/v1/expenses/{expenseId}/receipt` — mengembalikan byte
-    + `Content-Type` + `Cache-Control: private`; 404 `RECEIPT_NOT_FOUND` bila
-    expense tidak punya receipt. Wajib autentikasi + membership.
+    - `Content-Type` + `Cache-Control: private`; 404 `RECEIPT_NOT_FOUND` bila
+      expense tidak punya receipt. Wajib autentikasi + membership.
   - `POST /api/v1/groups/{groupId}/expenses` (dan PUT update) menerima multipart
     `multipart/form-data` (field: description, amount, currency, paidBy, category,
     expenseDate, note, splitType, participant[], split.<userId>, receipt) —

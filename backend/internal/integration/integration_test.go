@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -176,6 +178,29 @@ func (c *apiClient) do(method, path string, body any) (int, map[string]any) {
 		c.t.Fatalf("invalid JSON response for %s %s: %s", method, path, raw)
 	}
 	return resp.StatusCode, parsed
+}
+
+// doRaw performs a request and returns the raw response for non-JSON
+// endpoints (e.g. file downloads).
+func (c *apiClient) doRaw(method, path string) (int, http.Header, []byte) {
+	c.t.Helper()
+
+	req, err := http.NewRequest(method, serverURL+path, nil)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return resp.StatusCode, resp.Header.Clone(), raw
 }
 
 func (c *apiClient) expect(method, path string, body any, wantStatus int) map[string]any {
@@ -613,4 +638,99 @@ func TestFinancialValidation(t *testing.T) {
 		"receiverId": me,
 		"amount":     "10000.00",
 	}, http.StatusUnprocessableEntity)
+}
+
+// TestGroupReportExport verifies the Excel report download end to end:
+// content type, attachment headers, a valid xlsx (zip) body, and
+// authorization (member only).
+func TestGroupReportExport(t *testing.T) {
+	alice := newClient(t)
+	bob := newClient(t)
+
+	aliceEmail := uniqueEmail("alice")
+	bobEmail := uniqueEmail("bob")
+	alice.register("Alice", aliceEmail)
+	bob.register("Bob", bobEmail)
+
+	groupID := alice.createGroup("Bali Trip")
+	token := alice.inviteMember(groupID, bobEmail)
+	bob.acceptInvitation(token)
+
+	ids := alice.memberIDs(groupID)
+	alice.createExpense(groupID, map[string]any{
+		"description":  "Dinner",
+		"amount":       "200000.00",
+		"currency":     "IDR",
+		"paidBy":       ids[aliceEmail],
+		"expenseDate":  "2026-08-14T19:00:00+07:00",
+		"splitType":    "equal",
+		"category":     "Food & Drinks",
+		"participants": []string{ids[aliceEmail], ids[bobEmail]},
+	})
+	bob.createSettlement(groupID, map[string]any{
+		"payerId":    ids[bobEmail],
+		"receiverId": ids[aliceEmail],
+		"amount":     "100000.00",
+	})
+
+	status, header, body := alice.doRaw(http.MethodGet, "/api/v1/groups/"+groupID+"/export")
+	if status != http.StatusOK {
+		t.Fatalf("export: expected 200, got %d", status)
+	}
+	if ct := header.Get("Content-Type"); ct != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+		t.Errorf("unexpected Content-Type %q", ct)
+	}
+	if cd := header.Get("Content-Disposition"); !strings.Contains(cd, `filename="Bali-Trip-report.xlsx"`) {
+		t.Errorf("unexpected Content-Disposition %q", cd)
+	}
+
+	if len(body) < 4 || !bytes.Equal(body[:4], []byte("PK\x03\x04")) {
+		t.Fatalf("export body is not a zip/xlsx (first bytes %v)", body[:min(len(body), 4)])
+	}
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("open xlsx as zip: %v", err)
+	}
+	var sharedStrings string
+	for _, f := range zr.File {
+		if f.Name == "xl/sharedStrings.xml" {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			sharedStrings = string(raw)
+		}
+	}
+	if sharedStrings == "" {
+		t.Fatal("xlsx has no shared strings")
+	}
+	for _, want := range []string{"Dinner", "Food &amp; Drinks", "Alice", "TOTAL"} {
+		if !strings.Contains(sharedStrings, want) {
+			t.Errorf("workbook missing %q", want)
+		}
+	}
+
+	// Non-members cannot download the report.
+	status, _, _ = bob.doRaw(http.MethodGet, "/api/v1/groups/"+groupID+"/export")
+	if status != http.StatusOK {
+		t.Fatalf("member export: expected 200, got %d", status)
+	}
+
+	outside := newClient(t)
+	outside.register("Outside", uniqueEmail("outside"))
+	status, _, _ = outside.doRaw(http.MethodGet, "/api/v1/groups/"+groupID+"/export")
+	if status != http.StatusNotFound {
+		t.Fatalf("non-member export: expected 404, got %d", status)
+	}
+
+	anon := newClient(t)
+	status, _, _ = anon.doRaw(http.MethodGet, "/api/v1/groups/"+groupID+"/export")
+	if status != http.StatusUnauthorized {
+		t.Fatalf("anonymous export: expected 401, got %d", status)
+	}
 }

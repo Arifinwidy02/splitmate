@@ -655,7 +655,46 @@ no stored balance needs to be recalculated.
 
 ---
 
-# 7. Dashboard
+# 7. Export
+
+## GET /groups/:groupId/export
+
+Downloads the group financial report as an Excel (`.xlsx`) workbook
+attachment. The user must be a member; non-members receive
+`GROUP_NOT_FOUND`, unauthenticated requests `401`.
+
+Response headers:
+
+```text
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+Content-Disposition: attachment; filename="<group-name>-report.xlsx"; filename*=UTF-8''...
+```
+
+The filename is sanitized (only `a-zA-Z0-9._-` are kept; anything else
+becomes `-`).
+
+Workbook sheets (English headers):
+
+1. **Summary** — group name, currency, generated timestamp, member balances
+   (positive = to receive, negative = to pay), and settlement suggestions.
+   Balances are computed by the same balance engine as
+   `GET /groups/:groupId/balances`.
+2. **Expenses** — date, description, category, paid by, amount, participants
+   with each share, note, plus a `TOTAL` row. All expenses are included (no
+   pagination).
+3. **Settlements** — date, payer, receiver, amount.
+
+Amounts are written as numeric cells with a `#,##0.00` number format; the
+underlying value is the amount in major units (sen divided by 100) for
+display only — calculations remain server-side in integer minor units.
+
+The frontend triggers the download with a plain link to
+`/api/v1/groups/{groupId}/export` (the Next.js rewrite forwards the session
+cookie, same pattern as the receipt endpoint).
+
+---
+
+# 8. Dashboard
 
 ## GET /dashboard
 
@@ -722,7 +761,7 @@ Notes:
 
 ---
 
-# 8. Error Response
+# 9. Error Response
 
 All errors:
 
