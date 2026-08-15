@@ -15,9 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Arifinwidy02/splitmate-backend/internal/auth"
 	"github.com/Arifinwidy02/splitmate-backend/internal/database"
 	"github.com/Arifinwidy02/splitmate-backend/internal/server"
 	"github.com/Arifinwidy02/splitmate-backend/internal/session"
+	"github.com/Arifinwidy02/splitmate-backend/internal/user"
 	"github.com/Arifinwidy02/splitmate-backend/migrations"
 )
 
@@ -265,6 +267,70 @@ func (c *apiClient) memberIDs(groupID string) map[string]string {
 
 func uniqueEmail(prefix string) string {
 	return fmt.Sprintf("%s-%d@test.local", prefix, time.Now().UnixNano())
+}
+
+// TestOAuthFindOrCreate exercises the Google find-or-create path against the
+// real database: new oauth user (NULL password_hash), re-login, email linking,
+// and password login rejection for oauth-only users.
+func TestOAuthFindOrCreate(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	u, err := url.Parse(mainURL)
+	if err != nil {
+		t.Fatalf("parse main url: %v", err)
+	}
+	u.Path = "/" + testDB
+	pool, err := database.Connect(ctx, u.String())
+	if err != nil {
+		t.Fatalf("connect test db: %v", err)
+	}
+	defer pool.Close()
+
+	userRepo := user.NewRepository(pool)
+	authService := auth.NewService(userRepo)
+
+	email := uniqueEmail("oauth")
+	providerID := fmt.Sprintf("google-acc-%d", time.Now().UnixNano())
+
+	// New user created via oauth must succeed (regression: NULL password_hash).
+	created, err := authService.FindOrCreateByOAuth(ctx, "google", providerID, email, "OAuth User", nil)
+	if err != nil {
+		t.Fatalf("find or create oauth user: %v", err)
+	}
+	if created.Email != email {
+		t.Errorf("expected email %q, got %q", email, created.Email)
+	}
+	if created.PasswordHash != "" {
+		t.Error("oauth user must not have a password hash")
+	}
+
+	// Same account again resolves to the same user.
+	again, err := authService.FindOrCreateByOAuth(ctx, "google", providerID, email, "OAuth User", nil)
+	if err != nil {
+		t.Fatalf("second find or create: %v", err)
+	}
+	if again.ID != created.ID {
+		t.Errorf("expected same user, got %s and %s", created.ID, again.ID)
+	}
+
+	// OAuth-only user cannot sign in with a password.
+	if _, err := authService.Login(ctx, email, "password123"); err != auth.ErrInvalidCredentials {
+		t.Errorf("expected ErrInvalidCredentials for oauth-only user, got %v", err)
+	}
+
+	// A password user with the same email gets linked to the oauth account.
+	registered, err := authService.Register(ctx, "Password User", email, "password123")
+	if err != nil {
+		t.Fatalf("register password user: %v", err)
+	}
+	linked, err := authService.FindOrCreateByOAuth(ctx, "google", providerID, email, "OAuth User", nil)
+	if err != nil {
+		t.Fatalf("find or create after register: %v", err)
+	}
+	if linked.ID != registered.ID {
+		t.Errorf("expected linked user %s, got %s", registered.ID, linked.ID)
+	}
 }
 
 // TestFullUserJourney exercises the complete flow against the real database:

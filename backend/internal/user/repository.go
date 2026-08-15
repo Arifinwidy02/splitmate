@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -39,13 +40,16 @@ const userColumns = "id::text, name, email, password_hash, avatar_url, created_a
 
 func scanUser(row pgx.Row) (*User, error) {
 	var (
-		u     User
-		rawID string
+		u        User
+		rawID    string
+		password pgtype.Text
 	)
 
-	if err := row.Scan(&rawID, &u.Name, &u.Email, &u.PasswordHash, &u.AvatarURL, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&rawID, &u.Name, &u.Email, &password, &u.AvatarURL, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
 	}
+
+	u.PasswordHash = password.String
 
 	id, err := uuid.Parse(rawID)
 	if err != nil {

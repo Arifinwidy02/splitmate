@@ -4,6 +4,25 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
 
 ---
 
+## 2026-08-15 — Hotfix: Google Sign-In gagal untuk user baru (production)
+
+- Gejala: login Google di production menampilkan "Google sign in failed.",
+  log backend: `cannot scan NULL into *string` (kolom `password_hash`).
+- Penyebab: `CreateWithOAuth` membuat user tanpa `password_hash` (NULL), tetapi
+  `scanUser` di `internal/user/repository.go` meng-scan kolom tersebut ke `string`
+  biasa → error saat membuat user OAuth baru.
+- Perbaikan:
+  - `scanUser` memakai `pgtype.Text` untuk `password_hash` (NULL → string kosong).
+  - `Login` menolak user dengan hash kosong (user OAuth-only tidak bisa login
+    pakai password) dengan `ErrInvalidCredentials`.
+- Tes: `TestOAuthFindOrCreate` (integrasi, DB asli) — user OAuth baru, re-login,
+  linking email, dan penolakan password login. `go test ./...` hijau.
+- UI: tombol "Continue with Google" dipindah ke bawah form (form → divider "or" →
+  tombol Google) di halaman login & register.
+- Deployment: hanya backend yang berubah → redeploy Zeabur cukup.
+
+---
+
 ## 2026-08-15 — Google Sign In + Production (branch `staging`)
 
 ### Google Sign In (OAuth 2.0)
