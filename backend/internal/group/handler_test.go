@@ -3,8 +3,10 @@ package group
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 	"time"
@@ -74,7 +76,7 @@ type errorBody struct {
 
 func createGroupIn(t *testing.T, h *Handler, store *fakeStore, users *fakeUsers, admin uuid.UUID) *Group {
 	t.Helper()
-	g, err := h.service.CreateGroup(t.Context(), admin, "Trip", "", "IDR")
+	g, err := h.service.CreateGroup(t.Context(), admin, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -152,7 +154,7 @@ func TestListGroupsHandler(t *testing.T) {
 	h, _, _ := newTestHandler()
 	userID := uuid.New()
 
-	if _, err := h.service.CreateGroup(t.Context(), userID, "Trip", "", "IDR"); err != nil {
+	if _, err := h.service.CreateGroup(t.Context(), userID, "Trip", "", "IDR", nil); err != nil {
 		t.Fatalf("create group: %v", err)
 	}
 
@@ -607,5 +609,141 @@ func TestCreateInvitationHandlerErrorCodeMemberExists(t *testing.T) {
 	decodeData(t, rec, &eb)
 	if eb.Error.Code != "MEMBER_EXISTS" {
 		t.Errorf("expected MEMBER_EXISTS, got %q", eb.Error.Code)
+	}
+}
+
+func TestCreateGroupHandlerMultipartWithLogo(t *testing.T) {
+	h, store, _ := newTestHandler()
+	owner := uuid.New()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, v := range map[string]string{
+		"name":        "Trip",
+		"description": "Beach trip",
+		"currency":    "IDR",
+	} {
+		if err := mw.WriteField(k, v); err != nil {
+			t.Fatalf("write field: %v", err)
+		}
+	}
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="logo"; filename="logo.png"`)
+	partHeader.Set("Content-Type", "image/png")
+	part, err := mw.CreatePart(partHeader)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := part.Write([]byte("fake-logo-png")); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/groups", &buf)
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	r = r.WithContext(middleware.WithUserID(r.Context(), owner))
+	setPathValues(r)
+
+	rec := httptest.NewRecorder()
+	h.Create(rec, r)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var body struct {
+		Data struct {
+			Group groupResponse `json:"group"`
+		} `json:"data"`
+	}
+	decodeData(t, rec, &body)
+	if !body.Data.Group.HasLogo {
+		t.Error("expected response hasLogo=true")
+	}
+
+	stored := store.groups[0]
+	if stored == nil {
+		t.Fatal("expected group to be stored")
+	}
+	if !bytes.Equal(stored.LogoImage, []byte("fake-logo-png")) {
+		t.Errorf("expected logo bytes stored, got %q", stored.LogoImage)
+	}
+	if stored.LogoContentType != "image/png" {
+		t.Errorf("expected content type image/png, got %q", stored.LogoContentType)
+	}
+}
+
+func TestCreateGroupHandlerMultipartRejectsInvalidLogo(t *testing.T) {
+	h, _, _ := newTestHandler()
+	owner := uuid.New()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("name", "Trip"); err != nil {
+		t.Fatalf("write field: %v", err)
+	}
+	if err := mw.WriteField("currency", "IDR"); err != nil {
+		t.Fatalf("write field: %v", err)
+	}
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="logo"; filename="logo.pdf"`)
+	partHeader.Set("Content-Type", "application/pdf")
+	part, err := mw.CreatePart(partHeader)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := part.Write([]byte("%PDF")); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/groups", &buf)
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	r = r.WithContext(middleware.WithUserID(r.Context(), owner))
+	setPathValues(r)
+
+	rec := httptest.NewRecorder()
+	h.Create(rec, r)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGetLogoHandler(t *testing.T) {
+	h, _, _ := newTestHandler()
+	owner := uuid.New()
+
+	g, err := h.service.CreateGroup(t.Context(), owner, "Trip", "", "IDR",
+		&Logo{Image: []byte("img-bytes"), ContentType: "image/jpeg"})
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	rec := doRequest(t, h.GetLogo, http.MethodGet, "/groups/"+g.ID.String()+"/logo", nil, owner)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != "img-bytes" {
+		t.Errorf("expected logo body, got %q", rec.Body.String())
+	}
+	if rec.Header().Get("Content-Type") != "image/jpeg" {
+		t.Errorf("expected image/jpeg content type, got %q", rec.Header().Get("Content-Type"))
+	}
+
+	noLogo, err := h.service.CreateGroup(t.Context(), owner, "Trip 2", "", "IDR", nil)
+	if err != nil {
+		t.Fatalf("create group without logo: %v", err)
+	}
+	rec = doRequest(t, h.GetLogo, http.MethodGet, "/groups/"+noLogo.ID.String()+"/logo", nil, owner)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	var eb errorBody
+	decodeData(t, rec, &eb)
+	if eb.Error.Code != "LOGO_NOT_FOUND" {
+		t.Errorf("expected LOGO_NOT_FOUND, got %q", eb.Error.Code)
 	}
 }

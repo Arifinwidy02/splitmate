@@ -19,6 +19,7 @@ type GroupOverview struct {
 	Name        string    `json:"name"`
 	Currency    string    `json:"currency"`
 	MemberCount int       `json:"memberCount"`
+	HasLogo     bool      `json:"hasLogo"`
 	Balance     string    `json:"balance"`
 }
 

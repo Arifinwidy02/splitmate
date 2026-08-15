@@ -13,6 +13,7 @@ export type GroupSummary = {
   currency: string;
   role: "admin" | "member";
   memberCount: number;
+  hasLogo: boolean;
   createdAt: string;
 };
 
@@ -91,6 +92,7 @@ export type DashboardData = {
     name: string;
     currency: string;
     memberCount: number;
+    hasLogo: boolean;
     balance: string;
   }[];
   recentExpenses: {

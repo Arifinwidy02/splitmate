@@ -63,6 +63,7 @@ func (s *Service) GetDashboard(ctx context.Context, userID uuid.UUID) (*Dashboar
 			Name:        g.Name,
 			Currency:    g.Currency,
 			MemberCount: g.MemberCount,
+			HasLogo:     g.HasLogo,
 			Balance:     money.FormatMajor(b),
 		})
 	}

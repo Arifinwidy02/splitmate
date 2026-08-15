@@ -22,16 +22,22 @@ export async function createGroup(
   _state: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const name = String(formData.get("name") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim() || undefined;
-  const currency = String(formData.get("currency") ?? "IDR").toUpperCase();
+  const payload = new FormData();
+  payload.set("name", String(formData.get("name") ?? "").trim());
+  payload.set("currency", String(formData.get("currency") ?? "IDR").toUpperCase());
+  const description = String(formData.get("description") ?? "").trim();
+  if (description) payload.set("description", description);
+
+  const logo = formData.get("logo");
+  if (logo instanceof File && logo.size > 0) {
+    payload.set("logo", logo, logo.name);
+  }
 
   let groupId = "";
   try {
     const { group } = await apiFetch<{ group: GroupSummary }>("/api/v1/groups", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, currency }),
+      body: payload,
     });
     groupId = group.id;
   } catch (err) {

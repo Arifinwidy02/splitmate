@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { CategoryIcon } from "@/components/category-icon";
+import { GroupLogo } from "@/components/group-logo";
 import Toast from "@/components/toast";
 import { getCurrentUser } from "@/lib/auth";
 import { apiFetch } from "@/lib/server-api";
@@ -186,9 +187,7 @@ export default async function DashboardPage({
                     className="flex items-center justify-between gap-3 px-1 py-3 transition hover:bg-slate-50 rounded-lg"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-base font-bold text-green-700">
-                        {g.name.charAt(0).toUpperCase()}
-                      </span>
+                      <GroupLogo groupId={g.id} hasLogo={g.hasLogo} name={g.name} />
                       <div className="min-w-0">
                         <p className="truncate font-medium text-slate-900">{g.name}</p>
                         <p className="text-sm text-slate-500">{tr(dict.dashboard.memberCount, { n: g.memberCount })}</p>

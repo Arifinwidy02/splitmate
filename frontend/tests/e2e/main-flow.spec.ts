@@ -43,14 +43,16 @@ test("complete journey: register → group → invite → expense → balance �
   const owner = await ownerContext.newPage();
   await register(owner, ownerName, ownerEmail);
 
-  // Create a group.
+  // Create a group with an optional logo.
   await owner.goto("/groups");
   await owner.getByRole("link", { name: "New group" }).click();
   await owner.getByLabel("Group name").fill("E2E Trip");
+  await owner.locator("#logo").setInputFiles("tests/e2e/fixtures/receipt.png");
   await owner.getByRole("button", { name: "Create" }).click();
   await expect(owner).toHaveURL(/\/groups\/[0-9a-f-]+/);
   await expect(owner.getByText("Group created.")).toBeVisible();
   await expect(owner.getByRole("heading", { name: "E2E Trip" })).toBeVisible();
+  await expect(owner.locator("img[src*='/logo']")).toBeVisible();
 
   // Invite the friend and capture the token from the UI.
   const friendContext = await newContext(browser);

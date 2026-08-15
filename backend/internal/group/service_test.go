@@ -1,6 +1,7 @@
 package group
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -45,6 +46,7 @@ func (f *fakeStore) CreateGroupWithAdmin(ctx context.Context, g *Group, adminUse
 	g.CreatedBy = adminUserID
 	g.CreatedAt = now
 	g.UpdatedAt = now
+	g.HasLogo = g.LogoContentType != ""
 	f.groups = append(f.groups, g)
 	f.addMember(g.ID, adminUserID, RoleAdmin, now)
 	return g, nil
@@ -72,6 +74,18 @@ func (f *fakeStore) FindByID(ctx context.Context, id uuid.UUID) (*Group, error) 
 			cp := *g
 			cp.MemberCount = len(f.members[g.ID])
 			return &cp, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (f *fakeStore) FindLogo(ctx context.Context, id uuid.UUID) (*Logo, error) {
+	for _, g := range f.groups {
+		if g.ID == id {
+			if g.LogoContentType == "" {
+				return nil, ErrNoLogo
+			}
+			return &Logo{Image: g.LogoImage, ContentType: g.LogoContentType}, nil
 		}
 	}
 	return nil, ErrNotFound
@@ -248,7 +262,7 @@ func TestCreateGroupValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g, err := svc.CreateGroup(context.Background(), owner, tt.groupName, tt.desc, tt.currency)
+			g, err := svc.CreateGroup(context.Background(), owner, tt.groupName, tt.desc, tt.currency, nil)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
@@ -276,7 +290,7 @@ func TestGetGroupAuthorization(t *testing.T) {
 	owner := mustUUID(t)
 	other := mustUUID(t)
 
-	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR")
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -314,7 +328,7 @@ func TestUpdateGroupAuthorization(t *testing.T) {
 	owner := mustUUID(t)
 	member := mustUUID(t)
 
-	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR")
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -368,7 +382,7 @@ func TestDeleteGroupAuthorization(t *testing.T) {
 	owner := mustUUID(t)
 	member := mustUUID(t)
 
-	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR")
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -408,7 +422,7 @@ func TestListMembersAuthorization(t *testing.T) {
 	owner := mustUUID(t)
 	member := mustUUID(t)
 
-	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR")
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -443,7 +457,7 @@ func TestRemoveMember(t *testing.T) {
 	member := mustUUID(t)
 	stranger := mustUUID(t)
 
-	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR")
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -490,7 +504,7 @@ func TestCreateInvitation(t *testing.T) {
 	owner := mustUUID(t)
 	member := mustUUID(t)
 
-	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR")
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -573,7 +587,7 @@ func TestAcceptInvitation(t *testing.T) {
 	store.emails[invitee] = "invitee@test.com"
 	store.emails[interloper] = "evil@test.com"
 
-	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR")
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -645,7 +659,7 @@ func TestAcceptInvitationExpired(t *testing.T) {
 
 	users.users[invitee] = &user.User{ID: invitee, Name: "Invitee", Email: "invitee@test.com"}
 
-	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR")
+	group, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -679,7 +693,7 @@ func TestListGroupsOnlyMemberships(t *testing.T) {
 	owner := mustUUID(t)
 	other := mustUUID(t)
 
-	if _, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR"); err != nil {
+	if _, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", nil); err != nil {
 		t.Fatalf("create group: %v", err)
 	}
 
@@ -724,8 +738,106 @@ func TestCreateGroupErrorWrapping(t *testing.T) {
 	svc, store, _ := newTestService()
 	store.failCreateGroup = errors.New("db down")
 
-	_, err := svc.CreateGroup(context.Background(), mustUUID(t), "Trip", "", "IDR")
+	_, err := svc.CreateGroup(context.Background(), mustUUID(t), "Trip", "", "IDR", nil)
 	if err == nil || !strings.Contains(err.Error(), "db down") {
 		t.Fatalf("expected wrapped db error, got %v", err)
+	}
+}
+
+func TestCreateGroupWithLogo(t *testing.T) {
+	svc, store, _ := newTestService()
+	owner := mustUUID(t)
+
+	logo := &Logo{Image: []byte("logo-bytes"), ContentType: "image/png"}
+	g, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", logo)
+	if err != nil {
+		t.Fatalf("create group with logo: %v", err)
+	}
+	if !g.HasLogo {
+		t.Error("expected group to have a logo")
+	}
+	if !bytes.Equal(g.LogoImage, []byte("logo-bytes")) {
+		t.Error("expected logo image to be persisted on the group")
+	}
+
+	stored := store.groups[0]
+	if !bytes.Equal(stored.LogoImage, []byte("logo-bytes")) {
+		t.Error("expected logo stored in fake store")
+	}
+	if stored.LogoContentType != "image/png" {
+		t.Errorf("expected content type image/png, got %q", stored.LogoContentType)
+	}
+
+	noLogo, err := svc.CreateGroup(context.Background(), owner, "Trip 2", "", "IDR", nil)
+	if err != nil {
+		t.Fatalf("create group without logo: %v", err)
+	}
+	if noLogo.HasLogo {
+		t.Error("expected group without logo to have HasLogo=false")
+	}
+}
+
+func TestCreateGroupLogoValidation(t *testing.T) {
+	cases := []struct {
+		name    string
+		logo    *Logo
+		wantMsg string
+	}{
+		{"empty image", &Logo{ContentType: "image/jpeg"}, "Logo image is empty"},
+		{"oversized", &Logo{Image: make([]byte, maxLogoBytes+1), ContentType: "image/jpeg"}, "Logo image must be at most 5MB"},
+		{"unsupported type", &Logo{Image: []byte("x"), ContentType: "application/pdf"}, "Logo must be a JPEG, PNG, WebP or GIF image"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, _ := newTestService()
+			owner := mustUUID(t)
+
+			_, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR", tc.logo)
+			valErr := asValidationError(err)
+			if valErr == nil || valErr.Message != tc.wantMsg {
+				t.Fatalf("expected validation %q, got %v", tc.wantMsg, err)
+			}
+		})
+	}
+}
+
+func TestGetLogo(t *testing.T) {
+	svc, _, _ := newTestService()
+	owner := mustUUID(t)
+	member := mustUUID(t)
+
+	g, err := svc.CreateGroup(context.Background(), owner, "Trip", "", "IDR",
+		&Logo{Image: []byte("logo-bytes"), ContentType: "image/png"})
+	if err != nil {
+		t.Fatalf("create group with logo: %v", err)
+	}
+	if err := svc.store.AddMember(context.Background(), g.ID, member, RoleMember); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	logo, err := svc.GetLogo(context.Background(), member, g.ID)
+	if err != nil {
+		t.Fatalf("get logo: %v", err)
+	}
+	if !bytes.Equal(logo.Image, []byte("logo-bytes")) || logo.ContentType != "image/png" {
+		t.Errorf("expected logo bytes and image/png, got %q %q", logo.Image, logo.ContentType)
+	}
+
+	noLogo, err := svc.CreateGroup(context.Background(), owner, "Trip 2", "", "IDR", nil)
+	if err != nil {
+		t.Fatalf("create group without logo: %v", err)
+	}
+	if _, err := svc.GetLogo(context.Background(), owner, noLogo.ID); !errors.Is(err, ErrNoLogo) {
+		t.Errorf("expected ErrNoLogo, got %v", err)
+	}
+
+	outsider := mustUUID(t)
+	if _, err := svc.GetLogo(context.Background(), outsider, g.ID); !errors.Is(err, ErrGroupNotFound) {
+		t.Errorf("expected ErrGroupNotFound for non-member, got %v", err)
+	}
+
+	if _, err := svc.GetLogo(context.Background(), owner, mustUUID(t)); !errors.Is(err, ErrGroupNotFound) {
+		t.Errorf("expected ErrGroupNotFound for missing group, got %v", err)
 	}
 }

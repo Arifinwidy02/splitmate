@@ -7,7 +7,6 @@ import { ImagePlus, X } from "lucide-react";
 
 import { createExpense } from "@/app/actions/expenses";
 import AmountInput from "@/components/amount-input";
-import { CategoryIcon } from "@/components/category-icon";
 import { EXPENSE_CATEGORIES, type Member, type User } from "@/lib/api";
 import { toRFC3339 } from "@/lib/format";
 import type { Dict } from "@/lib/i18n/id";
@@ -43,7 +42,6 @@ export default function AddExpenseForm({
   const [selected, setSelected] = useState<Set<string>>(new Set([user.id]));
   const [customTotals, setCustomTotals] = useState<Record<string, string>>({});
   const [expenseDate, setExpenseDate] = useState<string>(() => localDateTimeValue(new Date()));
-  const [category, setCategory] = useState<string>("Food & Drinks");
   const [receipt, setReceipt] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState<string | null>(null);
@@ -125,34 +123,23 @@ export default function AddExpenseForm({
           />
         </div>
 
-        <fieldset>
-          <legend className="text-sm font-medium text-slate-700">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="category" className="text-sm font-medium text-slate-700">
             {dict.expenseForm.category}
-          </legend>
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          </label>
+          <select
+            id="category"
+            name="category"
+            defaultValue="Food & Drinks"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
+          >
             {EXPENSE_CATEGORIES.map((c) => (
-              <label
-                key={c}
-                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-green-600/40 ${
-                  category === c
-                    ? "border-green-600 bg-green-50 font-medium text-green-800"
-                    : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="category"
-                  value={c}
-                  checked={category === c}
-                  onChange={() => setCategory(c)}
-                  className="sr-only"
-                />
-                <CategoryIcon category={c} className="h-4 w-4" />
+              <option key={c} value={c}>
                 {c}
-              </label>
+              </option>
             ))}
-          </div>
-        </fieldset>
+          </select>
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="paidBy" className="text-sm font-medium text-slate-700">

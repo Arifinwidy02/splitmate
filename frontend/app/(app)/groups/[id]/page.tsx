@@ -12,6 +12,7 @@ import AddExpenseForm from "@/components/add-expense-form";
 import { CategoryIcon } from "@/components/category-icon";
 import DeleteExpenseButton from "@/components/delete-expense-button";
 import DeleteGroupButton from "@/components/delete-group-button";
+import { GroupLogo } from "@/components/group-logo";
 import InviteForm from "@/components/invite-form";
 import SettlePanel from "@/components/settle-panel";
 import Toast from "@/components/toast";
@@ -91,9 +92,13 @@ export default async function GroupDetailPage({
 
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-50 text-xl font-bold text-green-700">
-            {group.name.charAt(0).toUpperCase()}
-          </span>
+          <GroupLogo
+            groupId={group.id}
+            hasLogo={group.hasLogo}
+            name={group.name}
+            className="h-12 w-12 rounded-2xl bg-green-50 text-xl font-bold text-green-700"
+            imgClassName="h-12 w-12 rounded-2xl object-cover"
+          />
           <div>
             <h1 className="text-[32px] font-bold leading-tight text-slate-900">
               {group.name}

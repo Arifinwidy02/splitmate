@@ -3,6 +3,7 @@ import { Plus, Users } from "lucide-react";
 
 import CreateGroupForm from "@/components/create-group-form";
 import DeleteGroupButton from "@/components/delete-group-button";
+import { GroupLogo } from "@/components/group-logo";
 import JoinGroupForm from "@/components/join-group-form";
 import Toast from "@/components/toast";
 import { getCurrentUser } from "@/lib/auth";
@@ -67,9 +68,7 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
                     className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg px-1 py-3 transition hover:bg-slate-50"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-base font-bold text-green-700">
-                        {g.name.charAt(0).toUpperCase()}
-                      </span>
+                      <GroupLogo groupId={g.id} hasLogo={g.hasLogo} name={g.name} />
                       <div className="min-w-0">
                         <p className="truncate font-medium text-slate-900">{g.name}</p>
                         <p className="truncate text-sm text-slate-500">

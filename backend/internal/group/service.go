@@ -29,6 +29,7 @@ var (
 	ErrInvitationExpired   = errors.New("invitation expired")
 	ErrInvitationUsed      = errors.New("invitation already used")
 	ErrInvitationForbidden = errors.New("invitation is for a different email")
+	ErrNoLogo              = errors.New("group has no logo")
 )
 
 const (
@@ -52,7 +53,7 @@ func NewService(store store, users userFinder) *Service {
 	return &Service{store: store, users: users}
 }
 
-func (s *Service) CreateGroup(ctx context.Context, userID uuid.UUID, name, description, currency string) (*Group, error) {
+func (s *Service) CreateGroup(ctx context.Context, userID uuid.UUID, name, description, currency string, logo *Logo) (*Group, error) {
 	name = strings.TrimSpace(name)
 	description = strings.TrimSpace(description)
 	currency = strings.ToUpper(strings.TrimSpace(currency))
@@ -62,6 +63,9 @@ func (s *Service) CreateGroup(ctx context.Context, userID uuid.UUID, name, descr
 	}
 	if !currencyRe.MatchString(currency) {
 		return nil, &apperror.Validation{Message: "Currency must be a 3-letter code (e.g. IDR, USD)"}
+	}
+	if err := validateLogo(logo); err != nil {
+		return nil, err
 	}
 
 	var desc *string
@@ -73,9 +77,11 @@ func (s *Service) CreateGroup(ctx context.Context, userID uuid.UUID, name, descr
 	}
 
 	g, err := s.store.CreateGroupWithAdmin(ctx, &Group{
-		Name:        name,
-		Description: desc,
-		Currency:    currency,
+		Name:            name,
+		Description:     desc,
+		Currency:        currency,
+		LogoImage:       logoImage(logo),
+		LogoContentType: logoContentType(logo),
 	}, userID)
 	if err != nil {
 		return nil, fmt.Errorf("create group: %w", err)
@@ -176,6 +182,25 @@ func (s *Service) DeleteGroup(ctx context.Context, userID, groupID uuid.UUID) er
 	}
 
 	return nil
+}
+
+func (s *Service) GetLogo(ctx context.Context, userID, groupID uuid.UUID) (*Logo, error) {
+	if _, err := s.requireMembership(ctx, groupID, userID); err != nil {
+		return nil, err
+	}
+
+	logo, err := s.store.FindLogo(ctx, groupID)
+	if errors.Is(err, ErrNotFound) {
+		return nil, ErrGroupNotFound
+	}
+	if errors.Is(err, ErrNoLogo) {
+		return nil, ErrNoLogo
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find group logo: %w", err)
+	}
+
+	return logo, nil
 }
 
 func (s *Service) ListMembers(ctx context.Context, userID, groupID uuid.UUID) ([]*Member, error) {
@@ -334,6 +359,36 @@ func validateGroupName(name string) error {
 		return &apperror.Validation{Message: "Name must be between 1 and 100 characters"}
 	}
 	return nil
+}
+
+func validateLogo(logo *Logo) error {
+	if logo == nil {
+		return nil
+	}
+	if len(logo.Image) == 0 {
+		return &apperror.Validation{Message: "Logo image is empty"}
+	}
+	if len(logo.Image) > maxLogoBytes {
+		return &apperror.Validation{Message: "Logo image must be at most 5MB"}
+	}
+	if !logoContentTypes[logo.ContentType] {
+		return &apperror.Validation{Message: "Logo must be a JPEG, PNG, WebP or GIF image"}
+	}
+	return nil
+}
+
+func logoImage(logo *Logo) []byte {
+	if logo == nil {
+		return nil
+	}
+	return logo.Image
+}
+
+func logoContentType(logo *Logo) string {
+	if logo == nil {
+		return ""
+	}
+	return logo.ContentType
 }
 
 func normalizeEmail(email string) string {

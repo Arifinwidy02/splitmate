@@ -2,8 +2,10 @@ package group
 
 import (
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +46,7 @@ type groupResponse struct {
 	Currency    string    `json:"currency"`
 	Role        string    `json:"role"`
 	MemberCount int       `json:"memberCount"`
+	HasLogo     bool      `json:"hasLogo"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -90,17 +93,73 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req createGroupRequest
-	if err := response.DecodeJSON(w, r, &req); err != nil {
+	logo, err := decodeGroupRequest(w, r, &req)
+	if err != nil {
 		return
 	}
 
-	g, err := h.service.CreateGroup(r.Context(), userID, req.Name, deref(req.Description), req.Currency)
+	g, err := h.service.CreateGroup(r.Context(), userID, req.Name, deref(req.Description), req.Currency, logo)
 	if err != nil {
 		h.writeGroupError(w, err)
 		return
 	}
 
 	response.WriteJSON(w, http.StatusCreated, envelope{Data: groupData{Group: toGroupResponse(g)}})
+}
+
+func decodeGroupRequest(w http.ResponseWriter, r *http.Request, dst *createGroupRequest) (*Logo, error) {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := response.DecodeJSON(w, r, dst); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	logo, err := decodeMultipartGroupRequest(r, dst)
+	if err != nil {
+		response.WriteError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+		return nil, err
+	}
+
+	return logo, nil
+}
+
+func decodeMultipartGroupRequest(r *http.Request, dst *createGroupRequest) (*Logo, error) {
+	if err := r.ParseMultipartForm(logoFieldLimit); err != nil {
+		return nil, errors.New("Invalid form data")
+	}
+
+	form := r.MultipartForm
+	get := func(key string) string {
+		if values := form.Value[key]; len(values) > 0 {
+			return values[0]
+		}
+		return ""
+	}
+	dst.Name = get("name")
+	dst.Currency = get("currency")
+	if desc := get("description"); desc != "" {
+		dst.Description = &desc
+	}
+
+	file, header, err := r.FormFile("logo")
+	if errors.Is(err, http.ErrMissingFile) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.New("Invalid logo upload")
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxLogoBytes+1))
+	if err != nil {
+		return nil, errors.New("Invalid logo upload")
+	}
+
+	return &Logo{
+		Image:       data,
+		ContentType: header.Header.Get("Content-Type"),
+	}, nil
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +203,33 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.WriteJSON(w, http.StatusOK, envelope{Data: groupData{Group: toGroupResponse(g)}})
+}
+
+func (h *Handler) GetLogo(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	groupID, ok := pathUUID(r, "groupId")
+	if !ok {
+		response.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid group id")
+		return
+	}
+
+	logo, err := h.service.GetLogo(r.Context(), userID, groupID)
+	if err != nil {
+		h.writeGroupError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", logo.ContentType)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(logo.Image); err != nil {
+		slog.Error("write group logo", "error", err)
+	}
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
@@ -313,6 +399,8 @@ func (h *Handler) writeGroupError(w http.ResponseWriter, err error) {
 		response.WriteError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", valErr.Message)
 	case errors.Is(err, ErrGroupNotFound):
 		response.WriteError(w, http.StatusNotFound, "GROUP_NOT_FOUND", "Group not found")
+	case errors.Is(err, ErrNoLogo):
+		response.WriteError(w, http.StatusNotFound, "LOGO_NOT_FOUND", "Group has no logo")
 	case errors.Is(err, ErrMemberNotFound):
 		response.WriteError(w, http.StatusNotFound, "MEMBER_NOT_FOUND", "Member not found")
 	case errors.Is(err, ErrInvitationNotFound):
@@ -343,6 +431,7 @@ func toGroupResponse(g *Group) *groupResponse {
 		Currency:    g.Currency,
 		Role:        g.Role,
 		MemberCount: g.MemberCount,
+		HasLogo:     g.HasLogo,
 		CreatedAt:   g.CreatedAt,
 	}
 }

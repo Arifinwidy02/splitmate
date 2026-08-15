@@ -4,6 +4,46 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
 
 ---
 
+## 2026-08-15 — Dropdown Kategori + Logo Grup Opsional
+
+### Kategori Expense Kembali ke Dropdown
+
+- Picker kategori di `add-expense-form` dikembalikan dari radio grid berikon ke
+  `<select>` biasa (sesuai permintaan user). Ikon kategori tetap dipakai di
+  dashboard & group page (baris expense).
+
+### Logo Grup Opsional (saat membuat grup)
+
+- Backend:
+  - Migrasi `000003_group_logo`: kolom `logo_image BYTEA` +
+    `logo_content_type VARCHAR(100)` di tabel `groups` (pola sama dengan receipt).
+  - `POST /api/v1/groups` menerima multipart (name, description, currency, logo)
+    — JSON lama tetap didukung. Validasi logo: ≤ 5MB, whitelist
+    jpeg/png/webp/gif ("Logo image is empty" / "... at most 5MB" /
+    "Logo must be a JPEG, PNG, WebP or GIF image").
+  - Endpoint baru `GET /api/v1/groups/{groupId}/logo` (auth + membership;
+    404 `LOGO_NOT_FOUND` bila tanpa logo).
+  - Response grup (`GET/POST/PATCH` + list) menambah `hasLogo`; dashboard
+    `GroupOverview` juga mendapat `hasLogo`.
+- Frontend:
+  - `create-group-form`: upload logo opsional (input file selalu ter-mount
+    `sr-only`, preview, tombol hapus, validasi klien) — pola sama dengan
+    receipt (pelajaran dari bug FormData yang hilang).
+  - `createGroup` action kini kirim FormData multipart.
+  - Komponen `components/group-logo.tsx`: tampilkan logo (`next/image`
+    `unoptimized` karena butuh cookie session — optimizer server tidak membawa
+    cookie) atau badge inisial bila tidak ada. Dipakai di halaman grup
+    (header), daftar grup, dan dashboard.
+  - i18n: key `groups.logo*` di kamus id/en.
+- Tes: service (create with logo, validasi, get logo + otorisasi) & handler
+  (multipart create, logo invalid → 422, get logo handler) — hijau.
+- E2E: upload logo saat buat grup + assert `<img src*="/logo">` terlihat di
+  halaman grup; 2/2 deterministik.
+- Verifikasi: `go build`/`vet`/`test` hijau (kecuali `TestOAuthFindOrCreate`
+  pre-existing), `tsc`, `eslint`, vitest 54/54, `bun run build`, E2E 2/2.
+
+---
+
 ## 2026-08-15 — Upload Receipt, Header Auth, Ikon Kategori, Toaster Sonner, Koma Ribuan
 
 ### Upload Receipt (opsional) saat Tambah Expense

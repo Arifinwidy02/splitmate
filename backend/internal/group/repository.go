@@ -19,6 +19,7 @@ var (
 type store interface {
 	CreateGroupWithAdmin(ctx context.Context, g *Group, adminUserID uuid.UUID) (*Group, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*Group, error)
+	FindLogo(ctx context.Context, id uuid.UUID) (*Logo, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]*Group, error)
 	ListMembers(ctx context.Context, groupID uuid.UUID) ([]*Member, error)
 	FindMembership(ctx context.Context, groupID, userID uuid.UUID) (*Membership, error)
@@ -41,7 +42,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const groupColumns = "id::text, name, description, currency, created_by::text, created_at, updated_at"
+const groupColumns = "id::text, name, description, currency, created_by::text, created_at, updated_at, logo_image IS NOT NULL"
 
 func scanGroup(row pgx.Row) (*Group, error) {
 	var (
@@ -49,7 +50,7 @@ func scanGroup(row pgx.Row) (*Group, error) {
 		rawID string
 	)
 
-	if err := row.Scan(&rawID, &g.Name, &g.Description, &g.Currency, &g.CreatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+	if err := row.Scan(&rawID, &g.Name, &g.Description, &g.Currency, &g.CreatedBy, &g.CreatedAt, &g.UpdatedAt, &g.HasLogo); err != nil {
 		return nil, err
 	}
 
@@ -70,10 +71,10 @@ func (r *Repository) CreateGroupWithAdmin(ctx context.Context, g *Group, adminUs
 	defer tx.Rollback(ctx)
 
 	row := tx.QueryRow(ctx,
-		`INSERT INTO groups (name, description, currency, created_by)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO groups (name, description, currency, created_by, logo_image, logo_content_type)
+		 VALUES ($1, $2, $3, $4, NULLIF($5, ''::bytea), NULLIF($6, ''))
 		 RETURNING `+groupColumns,
-		g.Name, g.Description, g.Currency, adminUserID.String())
+		g.Name, g.Description, g.Currency, adminUserID.String(), g.LogoImage, g.LogoContentType)
 
 	created, err := scanGroup(row)
 	if err != nil {
@@ -107,7 +108,7 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*Group, error)
 		memberCount int
 	)
 
-	if err := row.Scan(&rawID, &g.Name, &g.Description, &g.Currency, &g.CreatedBy, &g.CreatedAt, &g.UpdatedAt, &memberCount); err != nil {
+	if err := row.Scan(&rawID, &g.Name, &g.Description, &g.Currency, &g.CreatedBy, &g.CreatedAt, &g.UpdatedAt, &g.HasLogo, &memberCount); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -124,9 +125,33 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*Group, error)
 	return &g, nil
 }
 
+func (r *Repository) FindLogo(ctx context.Context, id uuid.UUID) (*Logo, error) {
+	var (
+		contentType *string
+		image       []byte
+	)
+
+	err := r.pool.QueryRow(ctx,
+		`SELECT NULLIF(logo_content_type, ''), logo_image
+		 FROM groups
+		 WHERE id = $1`,
+		id.String()).Scan(&contentType, &image)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find group logo: %w", err)
+	}
+	if contentType == nil {
+		return nil, ErrNoLogo
+	}
+
+	return &Logo{Image: image, ContentType: *contentType}, nil
+}
+
 func (r *Repository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*Group, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT g.id::text, g.name, g.description, g.currency, g.created_by::text, g.created_at, g.updated_at, gm.role,
+		`SELECT g.id::text, g.name, g.description, g.currency, g.created_by::text, g.created_at, g.updated_at, g.logo_image IS NOT NULL, gm.role,
 		        (SELECT count(*) FROM group_members m WHERE m.group_id = g.id)
 		 FROM groups g
 		 JOIN group_members gm ON gm.group_id = g.id
@@ -145,7 +170,7 @@ func (r *Repository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*Gro
 			rawID string
 		)
 
-		if err := rows.Scan(&rawID, &g.Name, &g.Description, &g.Currency, &g.CreatedBy, &g.CreatedAt, &g.UpdatedAt, &g.Role, &g.MemberCount); err != nil {
+		if err := rows.Scan(&rawID, &g.Name, &g.Description, &g.Currency, &g.CreatedBy, &g.CreatedAt, &g.UpdatedAt, &g.HasLogo, &g.Role, &g.MemberCount); err != nil {
 			return nil, fmt.Errorf("scan group: %w", err)
 		}
 
