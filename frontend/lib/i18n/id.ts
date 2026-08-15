@@ -106,6 +106,7 @@ export const id = {
     memberCount: "{n} anggota",
     yourBalance: "Saldo kamu",
     addExpense: "Tambah Pengeluaran",
+    exportReport: "Ekspor ke Excel",
     balances: "Saldo",
     updatedFrom: "Diperbarui dari pengeluaran & pembayaran",
     noMembers: "Belum ada anggota.",

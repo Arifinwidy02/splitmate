@@ -4,6 +4,54 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
 
 ---
 
+## 2026-08-15 — Export Laporan Grup ke Excel (.xlsx)
+
+### Backend
+
+- Package baru `internal/report` (Handler → Service → Repository):
+  - `GET /api/v1/groups/{groupId}/export` — mengunduh laporan grup sebagai file
+    `.xlsx` (attachment). Wajib autentikasi + membership; non-member `404
+    GROUP_NOT_FOUND`, tanpa sesi `401`.
+  - Workbook 3 sheet: **Summary** (info grup, saldo tiap anggota, saran
+    pelunasan), **Expenses** (tanggal, deskripsi, kategori, dibayar oleh,
+    jumlah, peserta + bagian masing-masing, catatan, baris TOTAL — semua
+    expense tanpa pagination), **Settlements** (tanggal, pembayar, penerima,
+    jumlah).
+  - Saldo & saran pelunasan dihitung ulang dengan balance engine yang sama
+    (`balance.CalculateBalances` / `balance.SimplifyDebts`) — konsisten dengan
+    angka di aplikasi, tidak pernah diambil dari klien.
+  - Angka ditulis sebagai sel numerik (format `#,##0.00`); perhitungan tetap
+    integer minor units di server.
+  - Filename dinormalisasi (`safeFilename` → hanya `a-zA-Z0-9._-`,
+    `filename*=UTF-8''` untuk karakter non-ASCII) + `Content-Length` +
+    `Cache-Control: no-store`.
+  - Dependency baru: `github.com/xuri/excelize/v2` (standar de-facto untuk
+    generate XLSX di Go; hindari menulis format ZIP+XML dengan tangan).
+- Tes: `xlsx_test.go` (render workbook valid — sheet, sel teks & numerik,
+  empty report, `safeFilename`, `toFloat`) & `service_test.go` (non-member
+  ditolak, grup hilang → `GROUP_NOT_FOUND`, saldo/saran benar via engine,
+  urutan nama, grup tanpa expense).
+- Verifikasi live (stack lokal + PostgreSQL): register → login → grup →
+  expense → export → file zip valid (`PK..`), 3 sheet, isi string benar
+  (Dinner, kategori, peserta, TOTAL), unauthorized 401, cleanup data.
+
+### Frontend
+
+- Halaman grup: tombol "Ekspor ke Excel" (ikon `FileDown`) di header aksi —
+  link polos ke `/api/v1/groups/{id}/export` (rewrite Next.js meneruskan
+  cookie sesi, pola sama dengan link receipt).
+- i18n: key `group.exportReport` (id/en).
+- Verifikasi: `tsc --noEmit`, `eslint`, vitest 54/54, `bun run build` hijau.
+
+### Catatan
+
+- Deployment: backend berubah (endpoint + dependency) → redeploy Zeabur;
+  frontend berubah (tombol) → redeploy Vercel.
+- Header sheet memakai bahasa Inggris (data-oriented; kategori expense memang
+  konstanta Inggris), dicatat di `docs/API.md`.
+
+---
+
 ## 2026-08-15 — Dropdown Kategori + Logo Grup Opsional
 
 ### Kategori Expense Kembali ke Dropdown
