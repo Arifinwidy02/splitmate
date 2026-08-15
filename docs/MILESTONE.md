@@ -315,17 +315,36 @@ Register
 
 ### Tasks
 
-- [ ] Production environment
-- [ ] PostgreSQL production
-- [ ] Go container
-- [ ] Next.js deployment
-- [ ] Environment secrets
-- [ ] CORS configuration
-- [ ] Secure cookies
-- [ ] Logging
-- [ ] Health checks
+- [x] Production environment
+- [x] PostgreSQL production
+- [x] Go container
+- [x] Next.js deployment
+- [x] Environment secrets
+- [ ] CORS configuration (not needed — frontend calls the API server-side only; revisit if OAuth redirect flows are added)
+- [x] Secure cookies
+- [x] Logging
+- [x] Health checks
 - [ ] Database backups
 - [ ] Error monitoring
+
+### Notes
+
+- Next.js deployed on Vercel (`https://splitmate-phi.vercel.app`). The frontend lives in
+  `frontend/`, so the Vercel project's Root Directory must be set to `frontend`
+  (the `rootDirectory` property in `vercel.json` is rejected by Vercel — managed in
+  the dashboard). Framework Preset must be Next.js, otherwise the deployment has no
+  routing manifest and every path returns a platform 404.
+- Go API deployed on Zeabur (`https://splitmate.zeabur.app`) via `backend/Dockerfile`
+  (multi-stage, runs `migrate` then `api`; `.dockerignore` excludes `.env`). Service
+  Root Directory on Zeabur is set to `backend`.
+- PostgreSQL production on Zeabur; connection string injected via `DATABASE_URL`.
+- Environment secrets: `JWT_SECRET` (strong random), `DATABASE_URL`, `APP_ENV=production`
+  (enables `Secure` cookies), `NEXT_PUBLIC_API_URL` on Vercel (inlined at build time —
+  redeploy required after changing it).
+- Verified with a Playwright smoke test against the production URL: register → login →
+  create group → add expense → dashboard totals → delete group (cleanup), all green.
+- Remaining: database backups and error monitoring are intentionally deferred until
+  real usage exists.
 
 ---
 
