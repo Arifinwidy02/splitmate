@@ -88,6 +88,10 @@ func (s *Service) Login(ctx context.Context, email, password string) (*user.User
 		return nil, fmt.Errorf("find user: %w", err)
 	}
 
+	if u.PasswordHash == "" {
+		return nil, ErrInvalidCredentials
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
