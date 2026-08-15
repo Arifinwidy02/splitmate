@@ -58,7 +58,7 @@ test("complete journey: register → group → invite → expense → balance �
   const friendContext = await newContext(browser);
   const friendPage = await friendContext.newPage();
   const friendEmailRaw = friendEmail;
-  await owner.getByLabel("Email").fill(friendEmailRaw);
+  await owner.getByLabel("Emails").fill(friendEmailRaw);
   await owner.getByRole("button", { name: "Invite" }).click();
   const token = await owner
     .locator("code")

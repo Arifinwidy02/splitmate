@@ -236,6 +236,54 @@ Errors:
 
 ---
 
+## POST /groups/:groupId/invitations/bulk
+
+Request:
+
+```json
+{
+  "emails": ["budi@example.com", "siti@example.com"]
+}
+```
+
+Admin only. Creates pending invitations (valid 7 days) for up to 50 emails at
+once, in a single transaction. Each email is validated; the response lists the
+created invitations (raw tokens returned exactly once, only hashes are stored)
+plus per-email failures for emails that were skipped:
+
+```json
+{
+  "data": {
+    "invitations": [
+      {
+        "email": "budi@example.com",
+        "status": "pending",
+        "expiresAt": "2026-08-21T19:00:00+07:00",
+        "token": "SOjjdtnEGn9NJHqVUUgfvIEsFZiRfpnhZtygf4Ttoao"
+      }
+    ],
+    "failed": [
+      {
+        "email": "siti@example.com",
+        "reason": "MEMBER_EXISTS"
+      }
+    ]
+  }
+}
+```
+
+Failure reasons:
+
+- `MEMBER_EXISTS` — the email already belongs to a member
+- `INVITATION_EXISTS` — a pending invitation already exists for this email
+- `DUPLICATE` — the email appeared more than once in the request
+
+Errors:
+
+- `VALIDATION_ERROR` — no emails, more than 50, or any email is malformed
+
+---
+
 ## POST /groups/invitations/:token/accept
 
 Accepts a pending invitation using the raw token. The authenticated user's

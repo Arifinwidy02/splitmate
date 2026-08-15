@@ -4,6 +4,43 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
 
 ---
 
+## 2026-08-15 — Bulk Invite Anggota
+
+### Undangan Massal (paste banyak email sekaligus)
+
+- Backend:
+  - Endpoint baru `POST /api/v1/groups/{groupId}/invitations/bulk` (admin only).
+    Request `{"emails": [...]}` — maksimal 50 email per request; setiap email
+    dinormalisasi (lowercase/trim) dan divalidasi format. Semua undangan dibuat
+    dalam satu transaksi (`Repository.CreateInvitations`).
+  - Pengecekan batch `MembersByEmails` / `PendingInvitationsByEmails`
+    (query `email = ANY($2)`) — tanpa N+1.
+  - Response `201` berisi `invitations[]` (email, status, expiresAt, token —
+    token hanya dikembalikan sekali) dan `failed[]` dengan reason
+    `MEMBER_EXISTS` / `INVITATION_EXISTS` / `DUPLICATE`. Format email invalid,
+    list kosong, atau > 50 email → `422 VALIDATION_ERROR` (fail fast).
+  - Endpoint single `POST /invitations` tetap ada (tidak diubah).
+- Frontend:
+  - `invite-form` diganti dari input email tunggal menjadi textarea (pisah
+    dengan koma/baris baru) + hasil: daftar email → token, tombol "Salin
+    semua" (`email: token` per baris), copy per baris, dan daftar email yang
+    gagal dengan alasan (sudah anggota / sudah diundang / duplikat).
+  - Action `inviteMember` diganti `inviteMembers` (bulk) di
+    `app/actions/groups.ts`; tipe `Invitation` di `lib/api.ts` dihapus (tidak
+    terpakai).
+  - i18n: key `groups.inviteEmails*`, `copyAll`, `inviteFailure*` di id/en;
+    teks `inviteCreated`/`tokenExpiry` disesuaikan untuk jamak.
+- Tes: service (forbidden, validasi, batch campuran dengan skip member/duplikat,
+  pending invitation), handler (403/422/201 + daftar skip), integrasi
+  `TestBulkInvite` (campuran: user baru yang register setelah diundang + user
+  yang sudah punya akun) — hijau.
+- E2E: label form undangan berubah ke "Emails" di `main-flow.spec.ts`.
+- Note: flow accept tidak berubah — orang yang sudah punya akun tinggal login
+  dengan email yang sama lalu paste token; yang belum punya akun register
+  dulu dengan email tersebut.
+
+---
+
 ## 2026-08-15 — Dropdown Kategori + Logo Grup Opsional
 
 ### Kategori Expense Kembali ke Dropdown

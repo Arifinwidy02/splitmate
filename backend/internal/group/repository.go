@@ -29,6 +29,9 @@ type store interface {
 	Update(ctx context.Context, g *Group) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	CreateInvitation(ctx context.Context, inv *Invitation) error
+	CreateInvitations(ctx context.Context, invites []*Invitation) ([]*Invitation, error)
+	MembersByEmails(ctx context.Context, groupID uuid.UUID, emails []string) (map[string]bool, error)
+	PendingInvitationsByEmails(ctx context.Context, groupID uuid.UUID, emails []string) (map[string]bool, error)
 	FindInvitationByTokenHash(ctx context.Context, tokenHash string) (*Invitation, error)
 	FindPendingInvitation(ctx context.Context, groupID uuid.UUID, email string) (*Invitation, error)
 	AcceptInvitation(ctx context.Context, inv *Invitation, userID uuid.UUID) error
@@ -381,6 +384,112 @@ func (r *Repository) CreateInvitation(ctx context.Context, inv *Invitation) erro
 	inv.InvitedBy = invitedBy
 
 	return nil
+}
+
+func (r *Repository) CreateInvitations(ctx context.Context, invites []*Invitation) ([]*Invitation, error) {
+	if len(invites) == 0 {
+		return nil, nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	created := make([]*Invitation, 0, len(invites))
+	for _, inv := range invites {
+		row := tx.QueryRow(ctx,
+			`INSERT INTO group_invitations (group_id, email, invited_by, token_hash, status, expires_at)
+			 VALUES ($1, $2, $3, $4, $5, $6)
+			 RETURNING id::text, group_id::text, email, invited_by::text, token_hash, status, expires_at, created_at`,
+			inv.GroupID.String(), inv.Email, inv.InvitedBy.String(), inv.TokenHash, inv.Status, inv.ExpiresAt)
+
+		var (
+			rawID      string
+			rawGroupID string
+			rawInvited string
+		)
+		if err := row.Scan(&rawID, &rawGroupID, &inv.Email, &rawInvited, &inv.TokenHash, &inv.Status, &inv.ExpiresAt, &inv.CreatedAt); err != nil {
+			return nil, fmt.Errorf("insert invitation: %w", err)
+		}
+
+		id, err := uuid.Parse(rawID)
+		if err != nil {
+			return nil, fmt.Errorf("parse invitation id: %w", err)
+		}
+		groupID, err := uuid.Parse(rawGroupID)
+		if err != nil {
+			return nil, fmt.Errorf("parse invitation group id: %w", err)
+		}
+		invitedBy, err := uuid.Parse(rawInvited)
+		if err != nil {
+			return nil, fmt.Errorf("parse invited by: %w", err)
+		}
+		inv.ID = id
+		inv.GroupID = groupID
+		inv.InvitedBy = invitedBy
+		created = append(created, inv)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return created, nil
+}
+
+func (r *Repository) MembersByEmails(ctx context.Context, groupID uuid.UUID, emails []string) (map[string]bool, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT u.email
+		 FROM group_members gm
+		 JOIN users u ON u.id = gm.user_id
+		 WHERE gm.group_id = $1 AND u.email = ANY($2)`,
+		groupID.String(), emails)
+	if err != nil {
+		return nil, fmt.Errorf("query members by emails: %w", err)
+	}
+	defer rows.Close()
+
+	members := make(map[string]bool, len(emails))
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, fmt.Errorf("scan member email: %w", err)
+		}
+		members[email] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate members by emails: %w", err)
+	}
+
+	return members, nil
+}
+
+func (r *Repository) PendingInvitationsByEmails(ctx context.Context, groupID uuid.UUID, emails []string) (map[string]bool, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT email
+		 FROM group_invitations
+		 WHERE group_id = $1 AND email = ANY($2) AND status = 'pending'`,
+		groupID.String(), emails)
+	if err != nil {
+		return nil, fmt.Errorf("query pending invitations by emails: %w", err)
+	}
+	defer rows.Close()
+
+	pending := make(map[string]bool, len(emails))
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, fmt.Errorf("scan invitation email: %w", err)
+		}
+		pending[email] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pending invitations by emails: %w", err)
+	}
+
+	return pending, nil
 }
 
 func (r *Repository) FindInvitationByTokenHash(ctx context.Context, tokenHash string) (*Invitation, error) {
