@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import {
   ArrowLeft,
   HandCoins,
+  Paperclip,
   Plus,
-  Receipt,
   Users,
 } from "lucide-react";
 
 import AddExpenseForm from "@/components/add-expense-form";
+import { CategoryIcon } from "@/components/category-icon";
 import DeleteExpenseButton from "@/components/delete-expense-button";
 import DeleteGroupButton from "@/components/delete-group-button";
 import InviteForm from "@/components/invite-form";
@@ -195,7 +196,7 @@ export default async function GroupDetailPage({
 
             {expenses.length === 0 ? (
               <div className="py-8 text-center">
-                <Receipt className="mx-auto h-8 w-8 text-slate-300" aria-hidden="true" />
+                <CategoryIcon category="Other" className="mx-auto h-8 w-8 text-slate-300" />
                 <p className="mt-2 text-sm text-slate-500">
                   {dict.group.noExpenses}
                 </p>
@@ -211,7 +212,7 @@ export default async function GroupDetailPage({
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                        <Receipt className="h-4 w-4" aria-hidden="true" />
+                        <CategoryIcon category={e.category} className="h-4 w-4" />
                       </span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-slate-900">
@@ -227,6 +228,18 @@ export default async function GroupDetailPage({
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      {e.hasReceipt && (
+                        <a
+                          href={`/api/v1/expenses/${e.id}/receipt`}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={tr(dict.group.viewReceipt, { description: e.description })}
+                          title={dict.group.viewReceiptTitle}
+                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                        >
+                          <Paperclip className="h-4 w-4" aria-hidden="true" />
+                        </a>
+                      )}
                       <span className="text-sm font-semibold text-slate-900">
                         {formatCurrency(e.amount, e.currency)}
                       </span>

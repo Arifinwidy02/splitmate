@@ -95,7 +95,6 @@ function SettleForm({
         <AmountInput
           id="settle-amount"
           name="amount"
-          locale={dict.locale}
           required
           placeholder={dict.settle.amountPlaceholder}
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"

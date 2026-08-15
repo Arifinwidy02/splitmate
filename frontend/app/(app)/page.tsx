@@ -1,22 +1,16 @@
-import type { ComponentType } from "react";
 import Link from "next/link";
 import {
   ArrowDownCircle,
   ArrowUpCircle,
   ArrowRight,
-  Car,
-  Clapperboard,
-  Home,
-  Lightbulb,
-  Package,
   Plus,
   Receipt,
   Scale,
-  ShoppingBag,
-  UtensilsCrossed,
   Wallet,
 } from "lucide-react";
 
+import { CategoryIcon } from "@/components/category-icon";
+import Toast from "@/components/toast";
 import { getCurrentUser } from "@/lib/auth";
 import { apiFetch } from "@/lib/server-api";
 import { formatCurrency, formatDate, formatSignedCurrency } from "@/lib/format";
@@ -24,16 +18,6 @@ import type { DashboardData } from "@/lib/api";
 import type { Dict } from "@/lib/i18n/id";
 import { getDict } from "@/lib/i18n";
 import { tr } from "@/lib/i18n/tr";
-
-const CATEGORY_ICONS: Record<string, ComponentType<{ className?: string }>> = {
-  Accommodation: Home,
-  "Food & Drinks": UtensilsCrossed,
-  Transportation: Car,
-  Shopping: ShoppingBag,
-  Entertainment: Clapperboard,
-  Utilities: Lightbulb,
-  Other: Package,
-};
 
 function SummaryCard({
   label,
@@ -90,12 +74,11 @@ function CategoryChart({
     <ul className="flex flex-col gap-4">
       {categories.map(({ category, total }) => {
         const pct = max > 0 ? Math.round((Number(total) / max) * 100) : 0;
-        const CategoryIcon = CATEGORY_ICONS[category] ?? Package;
         return (
           <li key={category}>
             <div className="flex items-center justify-between text-sm">
               <span className="flex items-center gap-2 font-medium text-slate-700">
-                <CategoryIcon className="h-4 w-4 text-green-700" />
+                <CategoryIcon category={category} className="h-4 w-4 text-green-700" />
                 {category}
               </span>
               <span className="font-semibold text-slate-900">{formatCurrency(total, currency)}</span>
@@ -117,7 +100,12 @@ function CategoryChart({
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ success?: string }>;
+}) {
+  const { success } = await searchParams;
   const user = await getCurrentUser();
   const dict = await getDict();
   const { summary, groups, recentExpenses, categories } = await apiFetch<DashboardData>(
@@ -300,6 +288,7 @@ export default async function DashboardPage() {
           </section>
         </div>
       )}
+      <Toast success={success} dict={dict} />
     </div>
   );
 }

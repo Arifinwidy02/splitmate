@@ -4,6 +4,95 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
 
 ---
 
+## 2026-08-15 — Upload Receipt, Header Auth, Ikon Kategori, Toaster Sonner, Koma Ribuan
+
+### Upload Receipt (opsional) saat Tambah Expense
+
+- Backend:
+  - Migrasi `000002_expense_receipt`: kolom `receipt_image BYTEA` +
+    `receipt_content_type VARCHAR(100)` di tabel `expenses`.
+  - Keputusan penyimpanan: BYTEA di PostgreSQL (bukan S3/CDN) — nol infrastruktur
+    tambahan, kompatibel dengan Zeabur/Vercel. Byte hanya dimuat saat detail/GET
+    receipt; daftar expense hanya mengembalikan `hasReceipt: bool`.
+  - Validasi (service): ukuran ≤ 5MB (`maxReceiptBytes`), whitelist
+    `image/jpeg|png|webp|gif`, limit parse multipart 10MB. Error:
+    "Receipt image is empty" / "... at most 5MB" / "Receipt must be a JPEG, PNG,
+    WebP or GIF image".
+  - Endpoint baru `GET /api/v1/expenses/{expenseId}/receipt` — mengembalikan byte
+    + `Content-Type` + `Cache-Control: private`; 404 `RECEIPT_NOT_FOUND` bila
+    expense tidak punya receipt. Wajib autentikasi + membership.
+  - `POST /api/v1/groups/{groupId}/expenses` (dan PUT update) menerima multipart
+    `multipart/form-data` (field: description, amount, currency, paidBy, category,
+    expenseDate, note, splitType, participant[], split.<userId>, receipt) —
+    JSON lama tetap didukung.
+- Frontend:
+  - `app/actions/expenses.ts`: kirim FormData multipart (tanpa header
+    `Content-Type` manual agar boundary multipart di-set browser).
+  - `add-expense-form`: input file sr-only + label, preview gambar (object URL),
+    tombol remove, validasi klien tipe/ukuran.
+  - **Bug yang ditemukan saat verifikasi E2E**: input file awalnya di-unmount
+    (diganti UI preview) sehingga file hilang dari FormData saat submit — fix:
+    input selalu ter-mount (`sr-only`), hanya label yang di-hide; remove juga
+    me-reset `input.value` via ref.
+  - Group page: link "View receipt" (ikon Paperclip, `target="_blank"`) hanya
+    dirender saat `hasReceipt` — lewat rewrite `/api/v1/:path*`, cookie session
+    ikut terkirim sehingga gambar terbuka ter-autentikasi.
+- Tes: service (create with receipt, validasi, get receipt) + handler (multipart
+  decode dengan `textproto.MIMEHeader`, get receipt handler) — semua hijau.
+  Smoke test: create multipart dengan PNG → `hasReceipt: true`, GET receipt byte
+  identik.
+
+### Header Halaman Login/Register
+
+- `components/auth-header.tsx`: logo (`/splitmate_logo.png`) + teks SplitMate di
+  kiri (link ke `/login`), `LanguageSwitcher` di kanan. Switcher dipindah dari
+  dalam kartu auth ke header.
+
+### Ikon Kategori Expense
+
+- `components/category-icon.tsx`: peta ikon (lucide): Accommodation→BedDouble,
+  Food & Drinks→UtensilsCrossed, Transportation→CarFront, Shopping→ShoppingBag,
+  Entertainment→Clapperboard, Utilities→Lightbulb, Other→Tag (fallback Tag).
+- Dipakai di dashboard, group page, dan picker kategori di add-expense-form
+  (radio grid menggantikan `<select>`; radio sr-only tetap punya `name="category"`
+  agar nilai ter-submit, fokus keyboard via `has-[:focus-visible]:ring-2`).
+
+### Toaster Sonner (menggantikan toast custom)
+
+- `sonner` di-install; `<Toaster position="bottom-right" richColors closeButton />`
+  di root layout.
+- `components/toast.tsx` kini bridge ke sonner (mengembalikan `null`): panggil
+  `toast.success` sekali (guard ref), lalu strip `?success=` via `router.replace`.
+- Redirect auth: login → `/?success=signed-in`; register → `/login?success=registered`;
+  halaman login & dashboard merender `<Toast>`.
+
+### Input Amount: Koma Ribuan
+
+- `lib/amount.ts`: `formatAmountInput` kini memakai pemisah ribuan koma untuk
+  KEDUA locale ("1,000,000.50") — param `locale` dihapus; desimal tetap titik.
+  Placeholder ID berubah ke "0.00".
+- `amount-input.tsx`: prop opsional `value`/`onChange`/`ariaLabel` (mode
+  controlled) — dipakai untuk input split custom di expense form.
+
+### Perbaikan E2E (flaky, bukan regresi fitur)
+
+- Owner menunggu halaman yang sudah dirender sebelum friend join → daftar member
+  stale ("1 members"). Test sebelumnya lolos bergantung timing toast lama yang
+  melakukan `router.replace` ulang (+4.3s) — dengan toast sonner yang langsung
+  bersih, kelemahan ini deterministik. Fix: `owner.reload()` setelah friend join
+  (konvensi test sudah memakai reload setelah mutasi pihak lain).
+- Fixture `tests/e2e/fixtures/receipt.png` (4×4 PNG) + langkah
+  `setInputFiles("#receipt")` + asersi link "View receipt".
+
+### Verifikasi
+
+- Backend: `go build`/`go vet` hijau; `go test ./...` hijau kecuali
+  `TestOAuthFindOrCreate` (kegagalan pre-existing, terverifikasi di tree bersih).
+- Frontend: `tsc --noEmit`, `eslint`, `vitest` 54/54, `bun run build`, Playwright
+  E2E 2/2 (dijalankan 2×, deterministik) — semua hijau.
+
+---
+
 ## 2026-08-15 — i18n (ID/EN) + Input Amount Terformat
 
 ### i18n Bahasa Indonesia (default) & Inggris

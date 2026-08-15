@@ -36,6 +36,7 @@ export type ExpenseListItem = {
   category: string;
   expenseDate: string;
   participantCount: number;
+  hasReceipt: boolean;
   createdAt: string;
 };
 

@@ -1,6 +1,7 @@
 package expense
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -562,5 +563,102 @@ func TestEqualSplitSingleParticipant(t *testing.T) {
 	}
 	if len(splits) != 1 || splits[0].AmountSen != 50000 {
 		t.Errorf("expected single split of 50000, got %+v", splits)
+	}
+}
+
+func TestCreateExpenseWithReceipt(t *testing.T) {
+	svc, store, gs := newTestService()
+	a, b := uuid.New(), uuid.New()
+	g := setupGroup(t, gs, a, b)
+
+	input := baseInput(g, a)
+	input.EqualIDs = []uuid.UUID{a, b}
+	input.Receipt = &Receipt{Image: []byte("fake-jpeg-bytes"), ContentType: "image/jpeg"}
+
+	created, err := svc.CreateExpense(context.Background(), a, g.ID, input)
+	if err != nil {
+		t.Fatalf("create expense: %v", err)
+	}
+	if !bytes.Equal(created.ReceiptImage, []byte("fake-jpeg-bytes")) {
+		t.Error("expected receipt image to be persisted")
+	}
+	if created.ReceiptContentType != "image/jpeg" {
+		t.Errorf("expected content type image/jpeg, got %q", created.ReceiptContentType)
+	}
+
+	stored := store.expenses[created.ID]
+	if !bytes.Equal(stored.ReceiptImage, []byte("fake-jpeg-bytes")) {
+		t.Error("expected receipt stored in fake store")
+	}
+}
+
+func TestCreateExpenseReceiptValidation(t *testing.T) {
+	cases := []struct {
+		name    string
+		receipt *Receipt
+		wantMsg string
+	}{
+		{"empty image", &Receipt{ContentType: "image/jpeg"}, "Receipt image is empty"},
+		{"oversized", &Receipt{Image: make([]byte, maxReceiptBytes+1), ContentType: "image/jpeg"}, "Receipt image must be at most 5MB"},
+		{"unsupported type", &Receipt{Image: []byte("x"), ContentType: "application/pdf"}, "Receipt must be a JPEG, PNG, WebP or GIF image"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, gs := newTestService()
+			a := uuid.New()
+			g := setupGroup(t, gs, a)
+
+			input := baseInput(g, a)
+			input.EqualIDs = []uuid.UUID{a}
+			input.Receipt = tc.receipt
+
+			_, err := svc.CreateExpense(context.Background(), a, g.ID, input)
+			valErr := asValidationError(err)
+			if valErr == nil || valErr.Message != tc.wantMsg {
+				t.Fatalf("expected validation %q, got %v", tc.wantMsg, err)
+			}
+		})
+	}
+}
+
+func TestGetReceipt(t *testing.T) {
+	svc, _, gs := newTestService()
+	a, b := uuid.New(), uuid.New()
+	g := setupGroup(t, gs, a, b)
+
+	input := baseInput(g, a)
+	input.EqualIDs = []uuid.UUID{a, b}
+	input.Receipt = &Receipt{Image: []byte("img-bytes"), ContentType: "image/png"}
+	created, err := svc.CreateExpense(context.Background(), a, g.ID, input)
+	if err != nil {
+		t.Fatalf("create expense: %v", err)
+	}
+
+	image, contentType, err := svc.GetReceipt(context.Background(), b, created.ID)
+	if err != nil {
+		t.Fatalf("get receipt: %v", err)
+	}
+	if !bytes.Equal(image, []byte("img-bytes")) || contentType != "image/png" {
+		t.Errorf("expected receipt bytes and image/png, got %q %q", image, contentType)
+	}
+
+	noReceiptInput := baseInput(g, a)
+	noReceiptInput.EqualIDs = []uuid.UUID{a}
+	noReceipt, err := svc.CreateExpense(context.Background(), a, g.ID, noReceiptInput)
+	if err != nil {
+		t.Fatalf("create expense without receipt: %v", err)
+	}
+	if _, _, err := svc.GetReceipt(context.Background(), a, noReceipt.ID); !errors.Is(err, ErrNoReceipt) {
+		t.Errorf("expected ErrNoReceipt, got %v", err)
+	}
+
+	outsider := uuid.New()
+	if _, _, err := svc.GetReceipt(context.Background(), outsider, created.ID); !errors.Is(err, ErrGroupNotFound) {
+		t.Errorf("expected ErrGroupNotFound for non-member, got %v", err)
+	}
+
+	if _, _, err := svc.GetReceipt(context.Background(), a, uuid.New()); !errors.Is(err, ErrExpenseNotFound) {
+		t.Errorf("expected ErrExpenseNotFound, got %v", err)
 	}
 }

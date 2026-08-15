@@ -28,38 +28,39 @@ export async function createExpense(
     .getAll("participant")
     .map((v) => String(v));
 
-  const splits =
-    splitType === "custom"
-      ? participants.map((userId) => ({
-          userId,
-          amount: String(formData.get(`split-${userId}`) ?? ""),
-        }))
-      : undefined;
-
   const expenseDate =
     String(formData.get("expenseDateRfc") ?? "") ||
     toRFC3339(String(formData.get("expenseDate") ?? ""));
 
-  const payload = {
-    description: String(formData.get("description") ?? "").trim(),
-    amount: String(formData.get("amount") ?? ""),
-    currency: String(formData.get("currency") ?? "IDR"),
-    paidBy: String(formData.get("paidBy") ?? ""),
-    category: String(formData.get("category") ?? "Other"),
-    expenseDate,
-    note: String(formData.get("note") ?? "").trim() || undefined,
-    splitType,
-    participants: splitType === "equal" ? participants : undefined,
-    splits,
-  };
+  const payload = new FormData();
+  payload.set("description", String(formData.get("description") ?? "").trim());
+  payload.set("amount", String(formData.get("amount") ?? ""));
+  payload.set("currency", String(formData.get("currency") ?? "IDR"));
+  payload.set("paidBy", String(formData.get("paidBy") ?? ""));
+  payload.set("category", String(formData.get("category") ?? "Other"));
+  payload.set("expenseDate", expenseDate);
+  payload.set("splitType", splitType);
+  const note = String(formData.get("note") ?? "").trim();
+  if (note) payload.set("note", note);
+
+  for (const id of participants) {
+    payload.append("participant", id);
+    if (splitType === "custom") {
+      payload.set(`split.${id}`, String(formData.get(`split-${id}`) ?? ""));
+    }
+  }
+
+  const receipt = formData.get("receipt");
+  if (receipt instanceof File && receipt.size > 0) {
+    payload.set("receipt", receipt, receipt.name);
+  }
 
   try {
     await apiFetch<{ expense: ExpenseDetail }>(
       `/api/v1/groups/${groupId}/expenses`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: payload,
       },
     );
   } catch (err) {

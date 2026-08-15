@@ -20,6 +20,7 @@ var (
 	ErrGroupNotFound   = errors.New("group not found")
 	ErrForbidden       = errors.New("forbidden")
 	ErrInvalidSplit    = errors.New("invalid split")
+	ErrNoReceipt       = errors.New("expense has no receipt")
 )
 
 const maxAmountSen = 99_999_999_999_999
@@ -54,15 +55,17 @@ func (s *Service) CreateExpense(ctx context.Context, userID, groupID uuid.UUID, 
 	}
 
 	e := &Expense{
-		GroupID:     groupID,
-		Description: input.Description,
-		AmountSen:   input.AmountSen,
-		Currency:    input.Currency,
-		PaidBy:      input.PaidBy,
-		Category:    input.Category,
-		ExpenseDate: input.ExpenseDate,
-		Note:        input.Note,
-		CreatedBy:   userID,
+		GroupID:            groupID,
+		Description:        input.Description,
+		AmountSen:          input.AmountSen,
+		Currency:           input.Currency,
+		PaidBy:             input.PaidBy,
+		Category:           input.Category,
+		ExpenseDate:        input.ExpenseDate,
+		Note:               input.Note,
+		ReceiptImage:       receiptImage(input),
+		ReceiptContentType: receiptContentType(input),
+		CreatedBy:          userID,
 	}
 
 	created, err := s.store.CreateExpenseWithSplits(ctx, e, splits)
@@ -133,16 +136,18 @@ func (s *Service) UpdateExpense(ctx context.Context, userID, expenseID uuid.UUID
 	}
 
 	updated := &Expense{
-		ID:          expenseID,
-		GroupID:     e.GroupID,
-		Description: input.Description,
-		AmountSen:   input.AmountSen,
-		Currency:    input.Currency,
-		PaidBy:      input.PaidBy,
-		Category:    input.Category,
-		ExpenseDate: input.ExpenseDate,
-		Note:        input.Note,
-		CreatedBy:   e.CreatedBy,
+		ID:                 expenseID,
+		GroupID:            e.GroupID,
+		Description:        input.Description,
+		AmountSen:          input.AmountSen,
+		Currency:           input.Currency,
+		PaidBy:             input.PaidBy,
+		Category:           input.Category,
+		ExpenseDate:        input.ExpenseDate,
+		Note:               input.Note,
+		ReceiptImage:       receiptImage(input),
+		ReceiptContentType: receiptContentType(input),
+		CreatedBy:          e.CreatedBy,
 	}
 
 	if err := s.store.UpdateExpenseWithSplits(ctx, updated, splits); err != nil {
@@ -191,6 +196,40 @@ func (s *Service) DeleteExpense(ctx context.Context, userID, expenseID uuid.UUID
 	return nil
 }
 
+func (s *Service) GetReceipt(ctx context.Context, userID, expenseID uuid.UUID) ([]byte, string, error) {
+	e, _, err := s.store.FindByID(ctx, expenseID)
+	if errors.Is(err, ErrNotFound) {
+		return nil, "", ErrExpenseNotFound
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("find expense: %w", err)
+	}
+
+	if _, err := s.requireMembership(ctx, e.GroupID, userID); err != nil {
+		return nil, "", err
+	}
+
+	if len(e.ReceiptImage) == 0 {
+		return nil, "", ErrNoReceipt
+	}
+
+	return e.ReceiptImage, e.ReceiptContentType, nil
+}
+
+func receiptImage(input CreateExpenseInput) []byte {
+	if input.Receipt == nil {
+		return nil
+	}
+	return input.Receipt.Image
+}
+
+func receiptContentType(input CreateExpenseInput) string {
+	if input.Receipt == nil {
+		return ""
+	}
+	return input.Receipt.ContentType
+}
+
 func (s *Service) requireMembership(ctx context.Context, groupID, userID uuid.UUID) (*group.Membership, error) {
 	m, err := s.group.FindMembership(ctx, groupID, userID)
 	if errors.Is(err, group.ErrNotFound) {
@@ -237,6 +276,10 @@ func (s *Service) validateInput(ctx context.Context, groupID uuid.UUID, input Cr
 
 	if input.Note != nil && utf8.RuneCountInString(*input.Note) > maxNoteLen {
 		return &apperror.Validation{Message: "Note must be at most 1000 characters"}
+	}
+
+	if err := validateReceipt(input.Receipt); err != nil {
+		return err
 	}
 
 	members, err := s.group.ListMembers(ctx, groupID)
@@ -358,4 +401,20 @@ func isValidCategory(category string) bool {
 		}
 	}
 	return false
+}
+
+func validateReceipt(r *Receipt) error {
+	if r == nil {
+		return nil
+	}
+	if len(r.Image) == 0 {
+		return &apperror.Validation{Message: "Receipt image is empty"}
+	}
+	if len(r.Image) > maxReceiptBytes {
+		return &apperror.Validation{Message: "Receipt image must be at most 5MB"}
+	}
+	if !receiptContentTypes[r.ContentType] {
+		return &apperror.Validation{Message: "Receipt must be a JPEG, PNG, WebP or GIF image"}
+	}
+	return nil
 }

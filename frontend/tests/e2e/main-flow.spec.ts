@@ -74,14 +74,20 @@ test("complete journey: register → group → invite → expense → balance �
   await expect(friendPage.getByText("You joined the group.")).toBeVisible();
   await expect(friendPage.getByRole("heading", { name: "E2E Trip" })).toBeVisible();
 
-  // Owner adds an expense: 200000 split equally between both members.
+  // The owner's page was rendered before the friend joined, so reload to see the new member.
+  await owner.reload();
+  await expect(owner.getByText("2 members · IDR")).toBeVisible();
+
+  // Owner adds an expense with a receipt image: 200000 split equally between both members.
   await owner.getByRole("heading", { name: "Add Expense" }).scrollIntoViewIfNeeded();
   await owner.getByLabel("Description").fill("Dinner");
   await owner.getByLabel("Amount").fill("200000");
   await owner.getByLabel(new RegExp(`^${friendName}$`)).check();
+  await owner.locator("#receipt").setInputFiles("tests/e2e/fixtures/receipt.png");
   await owner.getByRole("button", { name: "Add Expense" }).click();
   await expect(owner.getByText("Expense added successfully.")).toBeVisible();
   await expect(owner.getByText("Dinner")).toBeVisible();
+  await expect(owner.getByRole("link", { name: /View receipt for Dinner/ })).toBeVisible();
 
   // Balances: owner paid, friend owes half.
   await expect(owner.getByText("+Rp100.000").first()).toBeVisible();

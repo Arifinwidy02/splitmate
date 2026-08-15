@@ -3,10 +3,13 @@ package expense
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -41,6 +44,8 @@ func setPathValues(r *http.Request) {
 	segs := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	switch {
 	case len(segs) == 2 && segs[0] == "expenses":
+		r.SetPathValue("expenseId", segs[1])
+	case len(segs) == 3 && segs[0] == "expenses" && segs[2] == "receipt":
 		r.SetPathValue("expenseId", segs[1])
 	case len(segs) == 3 && segs[0] == "groups" && segs[2] == "expenses":
 		r.SetPathValue("groupId", segs[1])
@@ -376,6 +381,137 @@ func TestListExpensesHandlerInvalidDateFilter(t *testing.T) {
 	rec := doRequest(t, h.List, http.MethodGet, "/groups/"+g.ID.String()+"/expenses?from=notadate", nil, a)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateExpenseHandlerMultipartWithReceipt(t *testing.T) {
+	h, store, gs := newTestHandler()
+	a, b := uuid.New(), uuid.New()
+	g := setupGroup(t, gs, a, b)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, v := range map[string]string{
+		"description": "Dinner",
+		"amount":      "600000",
+		"currency":    "IDR",
+		"paidBy":      a.String(),
+		"category":    "Food & Drinks",
+		"expenseDate": "2026-08-14T19:00:00+07:00",
+		"splitType":   "equal",
+	} {
+		if err := mw.WriteField(k, v); err != nil {
+			t.Fatalf("write field: %v", err)
+		}
+	}
+	for _, id := range []uuid.UUID{a, b} {
+		if err := mw.WriteField("participant", id.String()); err != nil {
+			t.Fatalf("write participant: %v", err)
+		}
+	}
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="receipt"; filename="receipt.jpg"`)
+	partHeader.Set("Content-Type", "image/jpeg")
+	part, err := mw.CreatePart(partHeader)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := part.Write([]byte("fake-jpeg")); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/groups/"+g.ID.String()+"/expenses", &buf)
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	r = r.WithContext(middleware.WithUserID(r.Context(), a))
+	setPathValues(r)
+
+	rec := httptest.NewRecorder()
+	h.Create(rec, r)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var stored *Expense
+	for _, e := range store.expenses {
+		stored = e
+	}
+	if stored == nil {
+		t.Fatal("expected expense to be stored")
+	}
+	if !bytes.Equal(stored.ReceiptImage, []byte("fake-jpeg")) {
+		t.Errorf("expected receipt bytes stored, got %q", stored.ReceiptImage)
+	}
+	if stored.ReceiptContentType != "image/jpeg" {
+		t.Errorf("expected content type image/jpeg, got %q", stored.ReceiptContentType)
+	}
+}
+
+func TestGetReceiptHandler(t *testing.T) {
+	h, store, gs := newTestHandler()
+	a, b := uuid.New(), uuid.New()
+	g := setupGroup(t, gs, a, b)
+
+	withReceipt := &Expense{
+		ID:                 uuid.New(),
+		GroupID:            g.ID,
+		Description:        "Dinner",
+		AmountSen:          10000,
+		Currency:           "IDR",
+		PaidBy:             a,
+		Category:           "Food & Drinks",
+		ExpenseDate:        time.Now(),
+		CreatedBy:          a,
+		ReceiptImage:       []byte("img-bytes"),
+		ReceiptContentType: "image/jpeg",
+	}
+	store.expenses[withReceipt.ID] = withReceipt
+
+	rec := doRequest(t, h.GetReceipt, http.MethodGet, "/expenses/"+withReceipt.ID.String()+"/receipt", nil, b)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != "img-bytes" {
+		t.Errorf("expected receipt body, got %q", rec.Body.String())
+	}
+	if rec.Header().Get("Content-Type") != "image/jpeg" {
+		t.Errorf("expected image/jpeg content type, got %q", rec.Header().Get("Content-Type"))
+	}
+
+	noReceipt := &Expense{
+		ID:          uuid.New(),
+		GroupID:     g.ID,
+		Description: "No receipt",
+		AmountSen:   10000,
+		Currency:    "IDR",
+		PaidBy:      a,
+		Category:    "Other",
+		ExpenseDate: time.Now(),
+		CreatedBy:   a,
+	}
+	store.expenses[noReceipt.ID] = noReceipt
+
+	rec = doRequest(t, h.GetReceipt, http.MethodGet, "/expenses/"+noReceipt.ID.String()+"/receipt", nil, b)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing receipt, got %d", rec.Code)
+	}
+	var errResp errorBody
+	decodeData(t, rec, &errResp)
+	if errResp.Error.Code != "RECEIPT_NOT_FOUND" {
+		t.Errorf("expected RECEIPT_NOT_FOUND, got %q", errResp.Error.Code)
+	}
+
+	outsider := uuid.New()
+	rec = doRequest(t, h.GetReceipt, http.MethodGet, "/expenses/"+withReceipt.ID.String()+"/receipt", nil, outsider)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-member, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(t, h.GetReceipt, http.MethodGet, "/expenses/"+uuid.New().String()+"/receipt", nil, a)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing expense, got %d", rec.Code)
 	}
 }
 

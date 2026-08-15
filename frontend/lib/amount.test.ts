@@ -36,24 +36,21 @@ describe("parseAmountInput", () => {
 });
 
 describe("formatAmountInput", () => {
-  it("groups thousands with dots for Indonesian", () => {
-    expect(formatAmountInput("1000", "id")).toBe("1.000");
-    expect(formatAmountInput("1500000", "id")).toBe("1.500.000");
+  it("groups thousands with commas for both locales", () => {
+    expect(formatAmountInput("1000")).toBe("1,000");
+    expect(formatAmountInput("1500000")).toBe("1,500,000");
+    expect(formatAmountInput("1000")).toBe("1,000");
+    expect(formatAmountInput("1500000")).toBe("1,500,000");
   });
 
-  it("groups thousands with commas for English", () => {
-    expect(formatAmountInput("1000", "en")).toBe("1,000");
-    expect(formatAmountInput("1500000", "en")).toBe("1,500,000");
-  });
-
-  it("formats decimals with the locale separator", () => {
-    expect(formatAmountInput("1000.50", "id")).toBe("1.000,50");
-    expect(formatAmountInput("1000.50", "en")).toBe("1,000.50");
+  it("formats decimals with a dot separator", () => {
+    expect(formatAmountInput("1000.50")).toBe("1,000.50");
+    expect(formatAmountInput("1000.50")).toBe("1,000.50");
   });
 
   it("returns an empty string for empty input", () => {
-    expect(formatAmountInput("", "id")).toBe("");
-    expect(formatAmountInput("", "en")).toBe("");
+    expect(formatAmountInput("")).toBe("");
+    expect(formatAmountInput("")).toBe("");
   });
 });
 
@@ -63,10 +60,10 @@ describe("nextAmountInputValue", () => {
     let display = "";
     for (const ch of "150000") {
       parsed = nextAmountInputValue(parsed, display, display + ch);
-      display = formatAmountInput(parsed, "id");
+      display = formatAmountInput(parsed);
     }
     expect(parsed).toBe("150000");
-    expect(display).toBe("150.000");
+    expect(display).toBe("150,000");
   });
 
   it("appends a decimal separator and digits", () => {
@@ -74,26 +71,26 @@ describe("nextAmountInputValue", () => {
     let display = "";
     for (const ch of "1000,50") {
       parsed = nextAmountInputValue(parsed, display, display + ch);
-      display = formatAmountInput(parsed, "id");
+      display = formatAmountInput(parsed);
     }
     expect(parsed).toBe("1000.50");
-    expect(display).toBe("1.000,50");
+    expect(display).toBe("1,000.50");
   });
 
   it("ignores extra digits beyond two decimals", () => {
     const parsed = "1.50";
-    const display = "1,50";
-    expect(nextAmountInputValue(parsed, display, "1,500")).toBe("1.50");
+    const display = "1.50";
+    expect(nextAmountInputValue(parsed, display, "1.500")).toBe("1.50");
   });
 
   it("backspaces the last character", () => {
     const parsed = "1000.5";
-    const display = "1.000,5";
-    expect(nextAmountInputValue(parsed, display, "1.000,")).toBe("1000.");
-    expect(nextAmountInputValue("1000.", "1.000,", "1.000")).toBe("1000");
+    const display = "1,000.5";
+    expect(nextAmountInputValue(parsed, display, "1,000.")).toBe("1000.");
+    expect(nextAmountInputValue("1000.", "1,000.", "1,000")).toBe("1000");
   });
 
   it("falls back to a full re-parse for mid-string edits", () => {
-    expect(nextAmountInputValue("150000", "150.000", "1x50.000")).toBe("150000");
+    expect(nextAmountInputValue("150000", "150,000", "1x50,000")).toBe("150000");
   });
 });

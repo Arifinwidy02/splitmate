@@ -2,6 +2,7 @@ package expense
 
 import (
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -24,19 +25,21 @@ func NewHandler(service *Service) *Handler {
 }
 
 type createExpenseRequest struct {
-	Description  string   `json:"description"`
-	Amount       string   `json:"amount"`
-	Currency     string   `json:"currency"`
-	PaidBy       string   `json:"paidBy"`
-	Category     string   `json:"category"`
-	ExpenseDate  string   `json:"expenseDate"`
-	Note         string   `json:"note"`
-	SplitType    string   `json:"splitType"`
-	Participants []string `json:"participants"`
-	Splits       []struct {
-		UserID string `json:"userId"`
-		Amount string `json:"amount"`
-	} `json:"splits"`
+	Description  string                `json:"description"`
+	Amount       string                `json:"amount"`
+	Currency     string                `json:"currency"`
+	PaidBy       string                `json:"paidBy"`
+	Category     string                `json:"category"`
+	ExpenseDate  string                `json:"expenseDate"`
+	Note         string                `json:"note"`
+	SplitType    string                `json:"splitType"`
+	Participants []string              `json:"participants"`
+	Splits       []expenseSplitRequest `json:"splits"`
+}
+
+type expenseSplitRequest struct {
+	UserID string `json:"userId"`
+	Amount string `json:"amount"`
 }
 
 type expenseResponse struct {
@@ -74,6 +77,7 @@ type summaryResponse struct {
 	Category         string    `json:"category"`
 	ExpenseDate      time.Time `json:"expenseDate"`
 	ParticipantCount int       `json:"participantCount"`
+	HasReceipt       bool      `json:"hasReceipt"`
 }
 
 type expenseData struct {
@@ -103,7 +107,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req createExpenseRequest
-	if err := response.DecodeJSON(w, r, &req); err != nil {
+	receipt, err := decodeExpenseRequest(w, r, &req)
+	if err != nil {
 		return
 	}
 
@@ -112,6 +117,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		h.writeExpenseError(w, err)
 		return
 	}
+	input.Receipt = receipt
 
 	e, err := h.service.CreateExpense(r.Context(), userID, groupID, input)
 	if err != nil {
@@ -208,7 +214,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req createExpenseRequest
-	if err := response.DecodeJSON(w, r, &req); err != nil {
+	receipt, err := decodeExpenseRequest(w, r, &req)
+	if err != nil {
 		return
 	}
 
@@ -217,6 +224,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		h.writeExpenseError(w, err)
 		return
 	}
+	input.Receipt = receipt
 
 	e, err := h.service.UpdateExpense(r.Context(), userID, expenseID, input)
 	if err != nil {
@@ -248,6 +256,33 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	response.WriteJSON(w, http.StatusOK, envelope{Data: emptyData{}})
 }
 
+func (h *Handler) GetReceipt(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	expenseID, ok := pathUUID(r, "expenseId")
+	if !ok {
+		response.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid expense id")
+		return
+	}
+
+	image, contentType, err := h.service.GetReceipt(r.Context(), userID, expenseID)
+	if err != nil {
+		h.writeExpenseError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(image); err != nil {
+		slog.Error("failed to write receipt", "error", err)
+	}
+}
+
 func (h *Handler) writeExpenseError(w http.ResponseWriter, err error) {
 	var valErr *apperror.Validation
 	switch {
@@ -257,6 +292,8 @@ func (h *Handler) writeExpenseError(w http.ResponseWriter, err error) {
 		response.WriteError(w, http.StatusUnprocessableEntity, "INVALID_SPLIT", "Expense split does not equal the total amount")
 	case errors.Is(err, ErrExpenseNotFound):
 		response.WriteError(w, http.StatusNotFound, "EXPENSE_NOT_FOUND", "Expense not found")
+	case errors.Is(err, ErrNoReceipt):
+		response.WriteError(w, http.StatusNotFound, "RECEIPT_NOT_FOUND", "Expense has no receipt")
 	case errors.Is(err, ErrGroupNotFound):
 		response.WriteError(w, http.StatusNotFound, "GROUP_NOT_FOUND", "Group not found")
 	case errors.Is(err, ErrForbidden):
@@ -265,6 +302,75 @@ func (h *Handler) writeExpenseError(w http.ResponseWriter, err error) {
 		slog.Error("expense request failed", "error", err)
 		response.WriteError(w, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
 	}
+}
+
+func decodeExpenseRequest(w http.ResponseWriter, r *http.Request, dst *createExpenseRequest) (*Receipt, error) {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := response.DecodeJSON(w, r, dst); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	receipt, err := decodeMultipartRequest(r, dst)
+	if err != nil {
+		hErr := &apperror.Validation{Message: err.Error()}
+		response.WriteError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", hErr.Message)
+		return nil, err
+	}
+
+	return receipt, nil
+}
+
+func decodeMultipartRequest(r *http.Request, dst *createExpenseRequest) (*Receipt, error) {
+	if err := r.ParseMultipartForm(receiptFieldLimit); err != nil {
+		return nil, errors.New("Invalid form data")
+	}
+
+	form := r.MultipartForm
+	get := func(key string) string {
+		if values := form.Value[key]; len(values) > 0 {
+			return values[0]
+		}
+		return ""
+	}
+	dst.Description = get("description")
+	dst.Amount = get("amount")
+	dst.Currency = get("currency")
+	dst.PaidBy = get("paidBy")
+	dst.Category = get("category")
+	dst.ExpenseDate = get("expenseDate")
+	dst.Note = get("note")
+	dst.SplitType = get("splitType")
+	dst.Participants = form.Value["participant"]
+
+	for key, values := range form.Value {
+		if strings.HasPrefix(key, "split.") && len(values) > 0 {
+			dst.Splits = append(dst.Splits, expenseSplitRequest{
+				UserID: strings.TrimPrefix(key, "split."),
+				Amount: values[0],
+			})
+		}
+	}
+
+	file, header, err := r.FormFile("receipt")
+	if errors.Is(err, http.ErrMissingFile) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.New("Invalid receipt upload")
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxReceiptBytes+1))
+	if err != nil {
+		return nil, errors.New("Invalid receipt upload")
+	}
+
+	return &Receipt{
+		Image:       data,
+		ContentType: header.Header.Get("Content-Type"),
+	}, nil
 }
 
 func parseExpenseInput(req createExpenseRequest) (CreateExpenseInput, error) {
@@ -418,6 +524,7 @@ func toSummaryResponse(e *ExpenseSummary) *summaryResponse {
 		Category:         e.Category,
 		ExpenseDate:      e.ExpenseDate,
 		ParticipantCount: e.ParticipantCount,
+		HasReceipt:       e.HasReceipt,
 	}
 }
 

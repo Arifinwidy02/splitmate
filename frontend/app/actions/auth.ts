@@ -56,7 +56,7 @@ export async function login(
   }
 
   await storeSessionFromResponse(res);
-  redirect("/");
+  redirect("/?success=signed-in");
 }
 
 export async function register(
@@ -81,7 +81,7 @@ export async function register(
     };
   }
 
-  redirect("/login");
+  redirect("/login?success=registered");
 }
 
 export async function logout() {

@@ -1,5 +1,3 @@
-import type { Locale } from "@/lib/i18n/constants";
-
 export function parseAmountInput(raw: string): string {
   const cleaned = raw.replace(/[^\d.,]/g, "");
 
@@ -27,14 +25,20 @@ export function parseAmountInput(raw: string): string {
   return result.replace(/^0+(?=\d)/, "");
 }
 
-export function formatAmountInput(parsed: string, locale: Locale): string {
+export function formatAmountInput(parsed: string): string {
   if (!parsed) return "";
   const [intPart, decPart] = parsed.split(".");
-  const groupLocale = locale === "id" ? "id-ID" : "en-US";
-  const grouped = new Intl.NumberFormat(groupLocale).format(Number(intPart || "0"));
+  const grouped = groupThousands(intPart || "0");
   if (decPart === undefined) return grouped;
-  const sep = locale === "id" ? "," : ".";
-  return `${grouped}${sep}${decPart}`;
+  return `${grouped}.${decPart}`;
+}
+
+function groupThousands(intPart: string): string {
+  const groups: string[] = [];
+  for (let i = intPart.length; i > 0; i -= 3) {
+    groups.unshift(intPart.slice(Math.max(0, i - 3), i));
+  }
+  return groups.join(",");
 }
 
 export function nextAmountInputValue(

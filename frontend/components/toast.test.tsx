@@ -1,61 +1,55 @@
-import { act, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Toast from "./toast";
 import { en } from "@/lib/i18n/en";
 
-const replace = vi.fn();
+const { replace, toastSuccess } = vi.hoisted(() => ({
+  replace: vi.fn(),
+  toastSuccess: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace }),
 }));
 
+vi.mock("sonner", () => ({
+  toast: { success: toastSuccess },
+}));
+
 describe("Toast", () => {
   beforeEach(() => {
     replace.mockClear();
+    toastSuccess.mockClear();
+    window.history.replaceState({}, "", "/groups?success=group-deleted");
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("renders nothing without a success param", () => {
     const { container } = render(<Toast dict={en} />);
     expect(container).toBeEmptyDOMElement();
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
-  it("renders the success message and dismisses on click", async () => {
-    const user = userEvent.setup();
-    render(<Toast success="expense-added" dict={en} />);
-
-    expect(screen.getByRole("status")).toHaveTextContent("Expense added successfully.");
-
-    await user.click(screen.getByRole("button", { name: /dismiss/i }));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-  });
-
-  it("auto-dismisses after 4 seconds and cleans the query param", () => {
-    vi.useFakeTimers();
-    window.history.replaceState({}, "", "/groups?success=group-deleted");
-
+  it("shows a success toast and cleans the query param", () => {
     render(<Toast success="group-deleted" dict={en} />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Group deleted.");
-
-    act(() => {
-      vi.advanceTimersByTime(4000);
-    });
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
+    expect(toastSuccess).toHaveBeenCalledWith("Group deleted.");
     expect(replace).toHaveBeenCalledWith("/groups", { scroll: false });
   });
 
+  it("does not show the same toast twice", () => {
+    const { rerender } = render(<Toast success="group-deleted" dict={en} />);
+    rerender(<Toast success="group-deleted" dict={en} />);
+
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores unknown success values", () => {
-    const { container } = render(<Toast success="nonsense" dict={en} />);
-    expect(container).toBeEmptyDOMElement();
+    render(<Toast success="nonsense" dict={en} />);
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 });

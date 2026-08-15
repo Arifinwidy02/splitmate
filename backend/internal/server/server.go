@@ -74,6 +74,7 @@ func New(deps Dependencies) http.Handler {
 	mux.Handle("GET /api/v1/groups/{groupId}/expenses", requireAuth(http.HandlerFunc(expenseHandler.List)))
 	mux.Handle("POST /api/v1/groups/{groupId}/expenses", requireAuth(http.HandlerFunc(expenseHandler.Create)))
 	mux.Handle("GET /api/v1/expenses/{expenseId}", requireAuth(http.HandlerFunc(expenseHandler.Get)))
+	mux.Handle("GET /api/v1/expenses/{expenseId}/receipt", requireAuth(http.HandlerFunc(expenseHandler.GetReceipt)))
 	mux.Handle("PATCH /api/v1/expenses/{expenseId}", requireAuth(http.HandlerFunc(expenseHandler.Update)))
 	mux.Handle("DELETE /api/v1/expenses/{expenseId}", requireAuth(http.HandlerFunc(expenseHandler.Delete)))
 

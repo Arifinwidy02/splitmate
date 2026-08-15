@@ -35,6 +35,8 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 
 const expenseColumns = "e.id::text, e.group_id::text, e.description, e.amount::text, e.currency, e.paid_by::text, e.category, e.expense_date, e.note, e.created_by::text, e.created_at, e.updated_at"
 
+const expenseDetailColumns = expenseColumns + ", e.receipt_image, e.receipt_content_type"
+
 func scanExpenseRow(row pgx.Row) (*Expense, error) {
 	var (
 		e          Expense
@@ -88,10 +90,10 @@ func (r *Repository) CreateExpenseWithSplits(ctx context.Context, e *Expense, sp
 	defer tx.Rollback(ctx)
 
 	row := tx.QueryRow(ctx,
-		`INSERT INTO expenses AS e (group_id, description, amount, currency, paid_by, category, expense_date, note, created_by)
-		 VALUES ($1, $2, $3::numeric, $4, $5, $6, $7, $8, $9)
+		`INSERT INTO expenses AS e (group_id, description, amount, currency, paid_by, category, expense_date, note, receipt_image, receipt_content_type, created_by)
+		 VALUES ($1, $2, $3::numeric, $4, $5, $6, $7, $8, NULLIF($9, ''::bytea), NULLIF($10, ''), $11)
 		 RETURNING `+expenseColumns,
-		e.GroupID.String(), e.Description, money.FormatMajor(e.AmountSen), e.Currency, e.PaidBy.String(), e.Category, e.ExpenseDate, e.Note, e.CreatedBy.String())
+		e.GroupID.String(), e.Description, money.FormatMajor(e.AmountSen), e.Currency, e.PaidBy.String(), e.Category, e.ExpenseDate, e.Note, e.ReceiptImage, e.ReceiptContentType, e.CreatedBy.String())
 
 	created, err := scanExpenseRow(row)
 	if err != nil {
@@ -111,27 +113,32 @@ func (r *Repository) CreateExpenseWithSplits(ctx context.Context, e *Expense, sp
 
 func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*Expense, []Participant, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT `+expenseColumns+`, u.name
+		`SELECT `+expenseDetailColumns+`, u.name
 		 FROM expenses e
 		 JOIN users u ON u.id = e.paid_by
 		 WHERE e.id = $1`,
 		id.String())
 
 	var (
-		payerName string
-		rawID     string
-		rawGroup  string
-		rawAmount string
-		rawPaidBy string
-		rawCreate string
-		e         Expense
+		payerName          string
+		rawID              string
+		rawGroup           string
+		rawAmount          string
+		rawPaidBy          string
+		rawCreate          string
+		receiptImage       []byte
+		receiptContentType *string
+		e                  Expense
 	)
 
-	if err := row.Scan(&rawID, &rawGroup, &e.Description, &rawAmount, &e.Currency, &rawPaidBy, &e.Category, &e.ExpenseDate, &e.Note, &rawCreate, &e.CreatedAt, &e.UpdatedAt, &payerName); err != nil {
+	if err := row.Scan(&rawID, &rawGroup, &e.Description, &rawAmount, &e.Currency, &rawPaidBy, &e.Category, &e.ExpenseDate, &e.Note, &rawCreate, &e.CreatedAt, &e.UpdatedAt, &receiptImage, &receiptContentType, &payerName); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil, ErrNotFound
 		}
 		return nil, nil, fmt.Errorf("find expense: %w", err)
+	}
+	if receiptContentType != nil {
+		e.ReceiptContentType = *receiptContentType
 	}
 
 	amountSen, err := money.ParseMajor(rawAmount)
@@ -160,6 +167,7 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*Expense, []Pa
 	e.AmountSen = amountSen
 	e.PaidBy = paidBy
 	e.CreatedBy = createdBy
+	e.ReceiptImage = receiptImage
 
 	rows, err := r.pool.Query(ctx,
 		`SELECT es.user_id::text, u.name, es.amount::text
@@ -214,12 +222,21 @@ func (r *Repository) UpdateExpenseWithSplits(ctx context.Context, e *Expense, sp
 	defer tx.Rollback(ctx)
 
 	var updatedAt time.Time
-	err = tx.QueryRow(ctx,
-		`UPDATE expenses AS e
-		 SET description = $1, amount = $2::numeric, currency = $3, paid_by = $4, category = $5, expense_date = $6, note = $7, updated_at = now()
-		 WHERE id = $8
-		 RETURNING e.updated_at`,
-		e.Description, money.FormatMajor(e.AmountSen), e.Currency, e.PaidBy.String(), e.Category, e.ExpenseDate, e.Note, e.ID.String()).Scan(&updatedAt)
+	if e.ReceiptImage != nil {
+		err = tx.QueryRow(ctx,
+			`UPDATE expenses AS e
+			 SET description = $1, amount = $2::numeric, currency = $3, paid_by = $4, category = $5, expense_date = $6, note = $7, receipt_image = $8, receipt_content_type = $9, updated_at = now()
+			 WHERE id = $10
+			 RETURNING e.updated_at`,
+			e.Description, money.FormatMajor(e.AmountSen), e.Currency, e.PaidBy.String(), e.Category, e.ExpenseDate, e.Note, e.ReceiptImage, e.ReceiptContentType, e.ID.String()).Scan(&updatedAt)
+	} else {
+		err = tx.QueryRow(ctx,
+			`UPDATE expenses AS e
+			 SET description = $1, amount = $2::numeric, currency = $3, paid_by = $4, category = $5, expense_date = $6, note = $7, updated_at = now()
+			 WHERE id = $8
+			 RETURNING e.updated_at`,
+			e.Description, money.FormatMajor(e.AmountSen), e.Currency, e.PaidBy.String(), e.Category, e.ExpenseDate, e.Note, e.ID.String()).Scan(&updatedAt)
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -299,7 +316,8 @@ func (r *Repository) ListByGroup(ctx context.Context, groupID uuid.UUID, page, l
 
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+expenseColumns+`, u.name,
-		        (SELECT count(*) FROM expense_splits es WHERE es.expense_id = e.id)
+		        (SELECT count(*) FROM expense_splits es WHERE es.expense_id = e.id),
+		        e.receipt_image IS NOT NULL
 		 FROM expenses e
 		 JOIN users u ON u.id = e.paid_by
 		 WHERE `+where+`
@@ -323,7 +341,7 @@ func (r *Repository) ListByGroup(ctx context.Context, groupID uuid.UUID, page, l
 			participantCount int
 		)
 
-		if err := rows.Scan(&rawID, &rawGroup, &s.Description, &rawAmount, &s.Currency, &rawPaidBy, &s.Category, &s.ExpenseDate, &s.Note, &rawCreated, &s.CreatedAt, &s.UpdatedAt, &s.PayerName, &participantCount); err != nil {
+		if err := rows.Scan(&rawID, &rawGroup, &s.Description, &rawAmount, &s.Currency, &rawPaidBy, &s.Category, &s.ExpenseDate, &s.Note, &rawCreated, &s.CreatedAt, &s.UpdatedAt, &s.PayerName, &participantCount, &s.HasReceipt); err != nil {
 			return nil, 0, fmt.Errorf("scan expense: %w", err)
 		}
 
