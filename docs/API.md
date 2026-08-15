@@ -61,6 +61,43 @@ Invalidates the current session.
 
 ---
 
+## GET /auth/google
+
+Starts the Google Sign In flow.
+
+- Redirects the browser to Google's consent screen (302).
+- Sets a short-lived HttpOnly `oauth_state` cookie to protect the callback from
+  CSRF.
+- Requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_URL` and
+  `APP_BASE_URL` to be configured. Returns `503 GOOGLE_NOT_CONFIGURED` otherwise.
+
+**Important:** the endpoint (and the callback below) must be reached through the
+frontend origin, so the session cookie is set on the frontend domain. The Next.js
+app proxies `/api/v1/*` to the API via rewrites. Register
+`{frontend-origin}/api/v1/auth/google/callback` as an authorized redirect URI in
+Google Cloud Console.
+
+---
+
+## GET /auth/google/callback
+
+Handles Google's redirect back to the app. Query parameters: `code`, `state`.
+
+- Validates `state` against the `oauth_state` cookie (constant-time compare).
+- Exchanges `code` for an access token, fetches the Google profile, then
+  finds-or-creates the user:
+
+  - existing `oauth_accounts` row → sign in as that user
+  - no oauth account but existing email (password user) → link the account and
+    sign in
+  - otherwise → create a new user (no password hash) and link the account
+
+- On success: sets the session cookie and redirects to `{APP_BASE_URL}/`.
+- On failure: logs the reason server-side and redirects to
+  `{APP_BASE_URL}/login?google=error`. Never exposes internal details to the user.
+
+---
+
 ## GET /me
 
 Returns the authenticated user.

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Arifinwidy02/splitmate-backend/internal/auth"
 	"github.com/Arifinwidy02/splitmate-backend/internal/config"
 	"github.com/Arifinwidy02/splitmate-backend/internal/database"
 	"github.com/Arifinwidy02/splitmate-backend/internal/server"
@@ -36,12 +37,25 @@ func main() {
 
 	tokenService := session.NewTokenService([]byte(cfg.JWTSecret), session.DefaultTokenTTL)
 
+	var oauth *auth.OAuthConfig
+	if cfg.GoogleOAuthEnabled() {
+		oauth = &auth.OAuthConfig{
+			ClientID:     cfg.GoogleClientID,
+			ClientSecret: cfg.GoogleClientSecret,
+			RedirectURL:  cfg.OAuthRedirectURL,
+			AppBaseURL:   cfg.AppBaseURL,
+		}
+	} else {
+		logger.Warn("google oauth not configured; google sign in will be disabled")
+	}
+
 	httpServer := &http.Server{
 		Addr: ":" + strconv.Itoa(cfg.Port),
 		Handler: server.New(server.Dependencies{
 			Pool:          pool,
 			TokenService:  tokenService,
 			SecureCookies: cfg.AppEnv == "production",
+			OAuth:         oauth,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,

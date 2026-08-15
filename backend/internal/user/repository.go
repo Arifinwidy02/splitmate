@@ -104,3 +104,71 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) 
 
 	return u, nil
 }
+
+func (r *Repository) FindByOAuthAccount(ctx context.Context, provider, providerAccountID string) (*User, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT u.id::text, u.name, u.email, u.password_hash, u.avatar_url, u.created_at, u.updated_at
+		 FROM users u
+		 JOIN oauth_accounts oa ON oa.user_id = u.id
+		 WHERE oa.provider = $1 AND oa.provider_account_id = $2`,
+		provider, providerAccountID)
+
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find user by oauth account: %w", err)
+	}
+
+	return u, nil
+}
+
+func (r *Repository) CreateWithOAuth(ctx context.Context, name, email string, avatarURL *string, provider, providerAccountID string) (*User, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin oauth user tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := tx.QueryRow(ctx,
+		`INSERT INTO users (name, email, avatar_url)
+		 VALUES ($1, $2, $3)
+		 RETURNING `+userColumns,
+		name, email, avatarURL)
+
+	u, err := scanUser(row)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrEmailTaken
+		}
+		return nil, fmt.Errorf("insert oauth user: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO oauth_accounts (user_id, provider, provider_account_id)
+		 VALUES ($1, $2, $3)`,
+		u.ID.String(), provider, providerAccountID); err != nil {
+		return nil, fmt.Errorf("insert oauth account: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit oauth user tx: %w", err)
+	}
+
+	return u, nil
+}
+
+func (r *Repository) LinkOAuthAccount(ctx context.Context, userID uuid.UUID, provider, providerAccountID string) error {
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO oauth_accounts (user_id, provider, provider_account_id)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (provider, provider_account_id) DO NOTHING`,
+		userID.String(), provider, providerAccountID)
+	if err != nil {
+		return fmt.Errorf("link oauth account: %w", err)
+	}
+
+	return nil
+}

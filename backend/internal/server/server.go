@@ -20,12 +20,13 @@ type Dependencies struct {
 	Pool          *pgxpool.Pool
 	TokenService  *session.TokenService
 	SecureCookies bool
+	OAuth         *auth.OAuthConfig
 }
 
 func New(deps Dependencies) http.Handler {
 	userRepo := user.NewRepository(deps.Pool)
 	authService := auth.NewService(userRepo)
-	authHandler := auth.NewHandler(authService, deps.TokenService, deps.SecureCookies)
+	authHandler := auth.NewHandler(authService, deps.TokenService, deps.SecureCookies, deps.OAuth)
 
 	groupRepo := group.NewRepository(deps.Pool)
 	groupService := group.NewService(groupRepo, userRepo)
@@ -56,6 +57,8 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
+	mux.HandleFunc("GET /api/v1/auth/google", authHandler.GoogleLogin)
+	mux.HandleFunc("GET /api/v1/auth/google/callback", authHandler.GoogleCallback)
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(authHandler.Me)))
 
 	mux.Handle("POST /api/v1/groups", requireAuth(http.HandlerFunc(groupHandler.Create)))

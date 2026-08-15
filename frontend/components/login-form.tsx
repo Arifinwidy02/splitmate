@@ -4,15 +4,23 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import { login, type AuthActionState } from "@/app/actions/auth";
+import GoogleButton from "@/components/google-button";
 
-export default function LoginForm() {
+export default function LoginForm({ initialError }: { initialError?: string }) {
   const [state, action, pending] = useActionState<AuthActionState, FormData>(
     login,
-    undefined,
+    initialError ? { error: initialError } : undefined,
   );
 
   return (
-    <form action={action} className="mt-6 flex flex-col gap-4">
+    <>
+      <GoogleButton />
+      <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+        <span className="h-px flex-1 bg-slate-200" />
+        or
+        <span className="h-px flex-1 bg-slate-200" />
+      </div>
+      <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="email" className="text-sm font-medium text-slate-700">
           Email
@@ -64,6 +72,7 @@ export default function LoginForm() {
           Create one
         </Link>
       </p>
-    </form>
+      </form>
+    </>
   );
 }
