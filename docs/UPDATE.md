@@ -4,51 +4,40 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
 
 ---
 
-## 2026-08-15 — Export Laporan Grup ke Excel (.xlsx)
+## 2026-08-15 — Bulk Invite Anggota
 
-### Backend
+### Undangan Massal (paste banyak email sekaligus)
 
-- Package baru `internal/report` (Handler → Service → Repository):
-  - `GET /api/v1/groups/{groupId}/export` — mengunduh laporan grup sebagai file
-    `.xlsx` (attachment). Wajib autentikasi + membership; non-member `404
-    GROUP_NOT_FOUND`, tanpa sesi `401`.
-  - Workbook 3 sheet: **Summary** (info grup, saldo tiap anggota, saran
-    pelunasan), **Expenses** (tanggal, deskripsi, kategori, dibayar oleh,
-    jumlah, peserta + bagian masing-masing, catatan, baris TOTAL — semua
-    expense tanpa pagination), **Settlements** (tanggal, pembayar, penerima,
-    jumlah).
-  - Saldo & saran pelunasan dihitung ulang dengan balance engine yang sama
-    (`balance.CalculateBalances` / `balance.SimplifyDebts`) — konsisten dengan
-    angka di aplikasi, tidak pernah diambil dari klien.
-  - Angka ditulis sebagai sel numerik (format `#,##0.00`); perhitungan tetap
-    integer minor units di server.
-  - Filename dinormalisasi (`safeFilename` → hanya `a-zA-Z0-9._-`,
-    `filename*=UTF-8''` untuk karakter non-ASCII) + `Content-Length` +
-    `Cache-Control: no-store`.
-  - Dependency baru: `github.com/xuri/excelize/v2` (standar de-facto untuk
-    generate XLSX di Go; hindari menulis format ZIP+XML dengan tangan).
-- Tes: `xlsx_test.go` (render workbook valid — sheet, sel teks & numerik,
-  empty report, `safeFilename`, `toFloat`) & `service_test.go` (non-member
-  ditolak, grup hilang → `GROUP_NOT_FOUND`, saldo/saran benar via engine,
-  urutan nama, grup tanpa expense).
-- Verifikasi live (stack lokal + PostgreSQL): register → login → grup →
-  expense → export → file zip valid (`PK..`), 3 sheet, isi string benar
-  (Dinner, kategori, peserta, TOTAL), unauthorized 401, cleanup data.
-
-### Frontend
-
-- Halaman grup: tombol "Ekspor ke Excel" (ikon `FileDown`) di header aksi —
-  link polos ke `/api/v1/groups/{id}/export` (rewrite Next.js meneruskan
-  cookie sesi, pola sama dengan link receipt).
-- i18n: key `group.exportReport` (id/en).
-- Verifikasi: `tsc --noEmit`, `eslint`, vitest 54/54, `bun run build` hijau.
-
-### Catatan
-
-- Deployment: backend berubah (endpoint + dependency) → redeploy Zeabur;
-  frontend berubah (tombol) → redeploy Vercel.
-- Header sheet memakai bahasa Inggris (data-oriented; kategori expense memang
-  konstanta Inggris), dicatat di `docs/API.md`.
+- Backend:
+  - Endpoint baru `POST /api/v1/groups/{groupId}/invitations/bulk` (admin only).
+    Request `{"emails": [...]}` — maksimal 50 email per request; setiap email
+    dinormalisasi (lowercase/trim) dan divalidasi format. Semua undangan dibuat
+    dalam satu transaksi (`Repository.CreateInvitations`).
+  - Pengecekan batch `MembersByEmails` / `PendingInvitationsByEmails`
+    (query `email = ANY($2)`) — tanpa N+1.
+  - Response `201` berisi `invitations[]` (email, status, expiresAt, token —
+    token hanya dikembalikan sekali) dan `failed[]` dengan reason
+    `MEMBER_EXISTS` / `INVITATION_EXISTS` / `DUPLICATE`. Format email invalid,
+    list kosong, atau > 50 email → `422 VALIDATION_ERROR` (fail fast).
+  - Endpoint single `POST /invitations` tetap ada (tidak diubah).
+- Frontend:
+  - `invite-form` diganti dari input email tunggal menjadi textarea (pisah
+    dengan koma/baris baru) + hasil: daftar email → token, tombol "Salin
+    semua" (`email: token` per baris), copy per baris, dan daftar email yang
+    gagal dengan alasan (sudah anggota / sudah diundang / duplikat).
+  - Action `inviteMember` diganti `inviteMembers` (bulk) di
+    `app/actions/groups.ts`; tipe `Invitation` di `lib/api.ts` dihapus (tidak
+    terpakai).
+  - i18n: key `groups.inviteEmails*`, `copyAll`, `inviteFailure*` di id/en;
+    teks `inviteCreated`/`tokenExpiry` disesuaikan untuk jamak.
+- Tes: service (forbidden, validasi, batch campuran dengan skip member/duplikat,
+  pending invitation), handler (403/422/201 + daftar skip), integrasi
+  `TestBulkInvite` (campuran: user baru yang register setelah diundang + user
+  yang sudah punya akun) — hijau.
+- E2E: label form undangan berubah ke "Emails" di `main-flow.spec.ts`.
+- Note: flow accept tidak berubah — orang yang sudah punya akun tinggal login
+  dengan email yang sama lalu paste token; yang belum punya akun register
+  dulu dengan email tersebut.
 
 ---
 
@@ -107,8 +96,8 @@ Catatan perubahan per tanggal. Format: tanggal, ringkasan, detail penting.
     "Receipt image is empty" / "... at most 5MB" / "Receipt must be a JPEG, PNG,
     WebP or GIF image".
   - Endpoint baru `GET /api/v1/expenses/{expenseId}/receipt` — mengembalikan byte
-    + `Content-Type` + `Cache-Control: private`; 404 `RECEIPT_NOT_FOUND` bila
-    expense tidak punya receipt. Wajib autentikasi + membership.
+    - `Content-Type` + `Cache-Control: private`; 404 `RECEIPT_NOT_FOUND` bila
+      expense tidak punya receipt. Wajib autentikasi + membership.
   - `POST /api/v1/groups/{groupId}/expenses` (dan PUT update) menerima multipart
     `multipart/form-data` (field: description, amount, currency, paidBy, category,
     expenseDate, note, splitType, participant[], split.<userId>, receipt) —
