@@ -74,14 +74,17 @@ Users can securely authenticate.
 - [x] Current user endpoint
 - [x] Next.js auth state
 - [x] Protected routes
+- [x] Access and refresh tokens
+- [x] Automatic token refresh
+- [x] Token revocation
 
 ### Optional
 
-- [ ] Google OAuth
+- [x] Google OAuth
 
 ### Definition of Done
 
-A user can register, log in, refresh the browser, and remain authenticated.
+A user can register, log in, refresh the browser, and remain authenticated. Access tokens automatically refresh when expired using refresh tokens.
 
 ---
 

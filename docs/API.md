@@ -51,13 +51,46 @@ Request:
 }
 ```
 
-Response sets an HttpOnly session cookie.
+Response sets two HttpOnly cookies:
+
+- `access_token`: Short-lived JWT (15 minutes) for API requests
+- `refresh_token`: Long-lived JWT (7 days) for obtaining new access tokens
 
 ---
 
 ## POST /auth/logout
 
-Invalidates the current session.
+Invalidates the current session and revokes refresh tokens.
+
+---
+
+## POST /auth/refresh
+
+Refreshes the access token using the refresh token cookie.
+
+Request:
+
+No body required. Uses the `refresh_token` cookie.
+
+Response:
+
+Sets new `access_token` and `refresh_token` cookies and returns user data:
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "uuid",
+      "name": "Arifin",
+      "email": "arifin@example.com"
+    }
+  }
+}
+```
+
+Error responses:
+
+- `401 UNAUTHORIZED`: Invalid or expired refresh token. Both cookies are cleared.
 
 ---
 
@@ -86,7 +119,6 @@ Handles Google's redirect back to the app. Query parameters: `code`, `state`.
 - Validates `state` against the `oauth_state` cookie (constant-time compare).
 - Exchanges `code` for an access token, fetches the Google profile, then
   finds-or-creates the user:
-
   - existing `oauth_accounts` row → sign in as that user
   - no oauth account but existing email (password user) → link the account and
     sign in

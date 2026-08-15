@@ -12,16 +12,16 @@ import (
 
 type userIDKey struct{}
 
-func RequireAuth(tokens *session.TokenService) func(http.Handler) http.Handler {
+func RequireAuth(sessionService *session.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie(session.CookieName)
+			cookie, err := r.Cookie(session.AccessTokenCookie)
 			if err != nil {
 				response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
 				return
 			}
 
-			userID, err := tokens.Parse(cookie.Value)
+			userID, err := sessionService.ParseAccessToken(cookie.Value)
 			if err != nil {
 				response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired session")
 				return

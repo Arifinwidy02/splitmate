@@ -478,6 +478,8 @@ Never expose internal database errors directly to clients.
 - Passwords must be hashed using Argon2id or bcrypt.
 - Authentication tokens must not be stored in localStorage.
 - Prefer secure HttpOnly cookies.
+- Use JWT access tokens (short-lived) and refresh tokens (long-lived).
+- Refresh tokens must be hashed before database storage.
 - Validate all request payloads.
 - Enforce authorization server-side.
 - Use parameterized SQL / ORM query APIs.

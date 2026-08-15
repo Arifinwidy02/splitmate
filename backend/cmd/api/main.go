@@ -35,7 +35,9 @@ func main() {
 	}
 	defer pool.Close()
 
-	tokenService := session.NewTokenService([]byte(cfg.JWTSecret), session.DefaultTokenTTL)
+	tokenService := session.NewTokenServiceWithDefaults([]byte(cfg.JWTSecret))
+	sessionRepo := session.NewRepository(pool)
+	sessionService := session.NewService(tokenService, sessionRepo)
 
 	var oauth *auth.OAuthConfig
 	if cfg.GoogleOAuthEnabled() {
@@ -53,7 +55,7 @@ func main() {
 		Addr: ":" + strconv.Itoa(cfg.Port),
 		Handler: server.New(server.Dependencies{
 			Pool:          pool,
-			TokenService:  tokenService,
+			Session:       sessionService,
 			SecureCookies: cfg.AppEnv == "production",
 			OAuth:         oauth,
 		}),

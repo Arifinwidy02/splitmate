@@ -30,13 +30,13 @@ type OAuthConfig struct {
 
 type Handler struct {
 	service       *Service
-	tokens        *session.TokenService
+	session       *session.Service
 	secureCookies bool
 	oauth         *OAuthConfig
 }
 
-func NewHandler(service *Service, tokens *session.TokenService, secureCookies bool, oauth *OAuthConfig) *Handler {
-	return &Handler{service: service, tokens: tokens, secureCookies: secureCookies, oauth: oauth}
+func NewHandler(service *Service, session *session.Service, secureCookies bool, oauth *OAuthConfig) *Handler {
+	return &Handler{service: service, session: session, secureCookies: secureCookies, oauth: oauth}
 }
 
 type registerRequest struct {
@@ -80,6 +80,15 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tokens, err := h.session.CreateTokenPair(r.Context(), u.ID)
+	if err != nil {
+		slog.Error("failed to create token pair", "error", err)
+		response.WriteError(w, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
+		return
+	}
+
+	h.setAccessCookie(w, tokens.AccessToken, tokens.AccessExpiresAt)
+	h.setRefreshCookie(w, tokens.RefreshToken, tokens.RefreshExpiresAt)
 	response.WriteJSON(w, http.StatusCreated, envelope{Data: userData{User: toUserResponse(u)}})
 }
 
@@ -95,20 +104,78 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiresAt, err := h.tokens.Issue(u.ID)
+	tokens, err := h.session.CreateTokenPair(r.Context(), u.ID)
 	if err != nil {
-		slog.Error("failed to issue session token", "error", err)
+		slog.Error("failed to create token pair", "error", err)
 		response.WriteError(w, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
 		return
 	}
 
-	h.setSessionCookie(w, token, expiresAt)
+	h.setAccessCookie(w, tokens.AccessToken, tokens.AccessExpiresAt)
+	h.setRefreshCookie(w, tokens.RefreshToken, tokens.RefreshExpiresAt)
 	response.WriteJSON(w, http.StatusOK, envelope{Data: userData{User: toUserResponse(u)}})
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	h.clearSessionCookie(w)
+	// Clear both cookies
+	h.clearAccessCookie(w)
+	h.clearRefreshCookie(w)
+	
+	// Try to revoke refresh token if present
+	if refreshCookie, err := r.Cookie(session.RefreshTokenCookie); err == nil {
+		_ = h.session.RevokeRefreshToken(r.Context(), refreshCookie.Value)
+	}
+	
 	response.WriteJSON(w, http.StatusOK, logoutResponse{})
+}
+
+func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+	refreshCookie, err := r.Cookie(session.RefreshTokenCookie)
+	if err != nil {
+		response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Refresh token required")
+		return
+	}
+
+	tokens, err := h.session.RefreshAccessToken(r.Context(), refreshCookie.Value)
+	if err != nil {
+		slog.Warn("failed to refresh access token", "error", err)
+		h.clearAccessCookie(w)
+		h.clearRefreshCookie(w)
+		
+		switch {
+		case errors.Is(err, session.ErrRefreshTokenNotFound), 
+		     errors.Is(err, session.ErrRefreshTokenRevoked),
+		     errors.Is(err, session.ErrRefreshTokenExpired):
+			response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired refresh token")
+		default:
+			response.WriteError(w, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
+		}
+		return
+	}
+
+	h.setAccessCookie(w, tokens.AccessToken, tokens.AccessExpiresAt)
+	h.setRefreshCookie(w, tokens.RefreshToken, tokens.RefreshExpiresAt)
+	
+	// Return user data with new tokens
+	userID, err := h.session.ParseAccessToken(tokens.AccessToken)
+	if err != nil {
+		slog.Error("failed to parse new access token", "error", err)
+		response.WriteError(w, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
+		return
+	}
+
+	u, err := h.service.GetUser(r.Context(), userID)
+	if errors.Is(err, user.ErrNotFound) {
+		response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	if err != nil {
+		slog.Error("failed to load user", "error", err)
+		response.WriteError(w, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
+		return
+	}
+
+	response.WriteJSON(w, http.StatusOK, envelope{Data: userData{User: toUserResponse(u)}})
 }
 
 func (h *Handler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
@@ -168,14 +235,15 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiresAt, err := h.tokens.Issue(u.ID)
+	tokens, err := h.session.CreateTokenPair(r.Context(), u.ID)
 	if err != nil {
-		slog.Error("failed to issue session token", "error", err)
+		slog.Error("failed to create token pair", "error", err)
 		h.redirectOAuthFailure(w, r, "session token failed")
 		return
 	}
 
-	h.setSessionCookie(w, token, expiresAt)
+	h.setAccessCookie(w, tokens.AccessToken, tokens.AccessExpiresAt)
+	h.setRefreshCookie(w, tokens.RefreshToken, tokens.RefreshExpiresAt)
 	http.Redirect(w, r, h.oauth.AppBaseURL+"/", http.StatusFound)
 }
 
@@ -244,9 +312,9 @@ func (h *Handler) writeAuthError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+func (h *Handler) setAccessCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     session.CookieName,
+		Name:     session.AccessTokenCookie,
 		Value:    token,
 		Path:     "/",
 		Expires:  expiresAt,
@@ -257,9 +325,22 @@ func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, expiresA
 	})
 }
 
-func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
+func (h *Handler) setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     session.CookieName,
+		Name:     session.RefreshTokenCookie,
+		Value:    token,
+		Path:     "/",
+		Expires:  expiresAt,
+		MaxAge:   int(time.Until(expiresAt).Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   h.secureCookies,
+	})
+}
+
+func (h *Handler) clearAccessCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     session.AccessTokenCookie,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
@@ -267,6 +348,28 @@ func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
 		SameSite: http.SameSiteLaxMode,
 		Secure:   h.secureCookies,
 	})
+}
+
+func (h *Handler) clearRefreshCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     session.RefreshTokenCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   h.secureCookies,
+	})
+}
+
+// Deprecated: use setAccessCookie
+func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+	h.setAccessCookie(w, token, expiresAt)
+}
+
+// Deprecated: use clearAccessCookie
+func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
+	h.clearAccessCookie(w)
 }
 
 func toUserResponse(u *user.User) userResponse {

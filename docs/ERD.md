@@ -80,6 +80,37 @@ to the users table.
 
 ---
 
+## refresh_tokens
+
+Stores refresh tokens for token-based authentication.
+
+```text
+refresh_tokens
+--------------
+id UUID PK
+user_id UUID FK → users.id
+token_hash TEXT NOT NULL
+expires_at TIMESTAMPTZ NOT NULL
+created_at TIMESTAMPTZ NOT NULL
+revoked_at TIMESTAMPTZ
+```
+
+- `token_hash`: SHA-256 hash of the refresh token (never store raw tokens)
+- `expires_at`: When the refresh token expires (typically 7 days)
+- `revoked_at`: Set when token is revoked (logout, refresh, or manual revocation)
+- Only one active refresh token per user (enforced by unique index)
+
+Indexes:
+
+```text
+idx_refresh_tokens_token_hash
+idx_refresh_tokens_user_id
+idx_refresh_tokens_expires_at
+idx_refresh_tokens_user_active (partial, WHERE revoked_at IS NULL)
+```
+
+---
+
 ## groups
 
 Represents an expense-sharing group.
@@ -235,6 +266,8 @@ amount > 0
 users
   │
   ├──< oauth_accounts
+  │
+  ├──< refresh_tokens
   │
   ├──< group_members >── groups
   │                         │

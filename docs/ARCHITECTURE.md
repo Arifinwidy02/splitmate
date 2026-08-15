@@ -190,7 +190,9 @@ Repository should not decide business rules.
 
 # 6. Authentication
 
-Recommended MVP approach:
+## Token-Based Authentication with Refresh Tokens
+
+The application uses JWT-based authentication with access and refresh tokens:
 
 ```text
 Browser
@@ -201,10 +203,45 @@ Go API
   ↓
 Verify credentials
   ↓
-Create session
+Generate access token (15 min) + refresh token (7 days)
   ↓
-Set HttpOnly Secure cookie
+Set HttpOnly Secure cookies
 ```
+
+### Access Tokens
+
+- Short-lived (15 minutes)
+- Used for API requests
+- Sent in `Authorization: Bearer <token>` header
+- Stored in `access_token` HttpOnly cookie
+
+### Refresh Tokens
+
+- Long-lived (7 days)
+- Used to obtain new access tokens
+- Stored in `refresh_token` HttpOnly cookie
+- Stored in database for revocation support
+- One-time use (revoked after refresh)
+
+### Token Refresh Flow
+
+```text
+API Request with expired access token
+  ↓
+401 Unauthorized
+  ↓
+Frontend calls /auth/refresh
+  ↓
+Backend validates refresh token
+  ↓
+Generate new access + refresh tokens
+  ↓
+Update cookies
+  ↓
+Retry original request
+```
+
+### Security Considerations
 
 Avoid storing authentication tokens in:
 
@@ -213,9 +250,16 @@ localStorage
 sessionStorage
 ```
 
-The browser should automatically send the secure cookie to the API.
+The browser should automatically send the secure cookies to the API.
 
 For local development, HTTPS may be disabled, but production cookies must be Secure.
+
+Refresh tokens are:
+
+- Hashed before storage in database
+- Single-use (revoked after refresh)
+- Automatically revoked on logout
+- Can be revoked for all user sessions
 
 ---
 
