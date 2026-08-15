@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,10 +19,10 @@ import (
 )
 
 func newTestHandler() (*Handler, *fakeStore) {
-	store := &fakeStore{}
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
 	tokens := session.NewTokenService([]byte("test-secret"), session.DefaultTokenTTL)
 	svc := NewService(store)
-	return NewHandler(svc, tokens, false), store
+	return NewHandler(svc, tokens, false, nil), store
 }
 
 func decodeError(t *testing.T, rec *httptest.ResponseRecorder) response.ErrorBody {
@@ -219,4 +220,145 @@ func mustHash(password string) string {
 		panic(err)
 	}
 	return string(hash)
+}
+
+func newTestOAuthHandler() (*Handler, *fakeStore) {
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
+	tokens := session.NewTokenService([]byte("test-secret"), session.DefaultTokenTTL)
+	svc := NewService(store)
+	svc.google = &fakeGoogleClient{
+		profile: &GoogleProfile{ID: "google-id-1", Email: "a@b.com", Name: "Google User"},
+	}
+	oauth := &OAuthConfig{
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+		RedirectURL:  "http://localhost:3000/api/v1/auth/google/callback",
+		AppBaseURL:   "http://localhost:3000",
+	}
+	return NewHandler(svc, tokens, false, oauth), store
+}
+
+func TestGoogleLoginNotConfigured(t *testing.T) {
+	handler, _ := newTestHandler()
+
+	rec := httptest.NewRecorder()
+	handler.GoogleLogin(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, rec.Code)
+	}
+	if err := decodeError(t, rec); err.Code != "GOOGLE_NOT_CONFIGURED" {
+		t.Errorf("expected GOOGLE_NOT_CONFIGURED, got %q", err.Code)
+	}
+}
+
+func TestGoogleLoginRedirectsWithStateCookie(t *testing.T) {
+	handler, _ := newTestOAuthHandler()
+
+	rec := httptest.NewRecorder()
+	handler.GoogleLogin(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected status %d, got %d", http.StatusFound, rec.Code)
+	}
+	location := rec.Header().Get("Location")
+	if !strings.HasPrefix(location, "https://accounts.google.com/o/oauth2/v2/auth?") {
+		t.Errorf("expected redirect to google, got %q", location)
+	}
+	if !strings.Contains(location, "client_id=client-id") {
+		t.Errorf("expected client_id in redirect, got %q", location)
+	}
+	if !strings.Contains(location, "redirect_uri=") || !strings.Contains(location, "state=") {
+		t.Errorf("expected redirect_uri and state in redirect, got %q", location)
+	}
+
+	setCookie := rec.Header().Get("Set-Cookie")
+	if !strings.Contains(setCookie, oauthStateCookie+"=") {
+		t.Errorf("expected oauth state cookie, got %q", setCookie)
+	}
+	if !strings.Contains(setCookie, "HttpOnly") {
+		t.Error("oauth state cookie must be HttpOnly")
+	}
+}
+
+func TestGoogleCallbackMissingState(t *testing.T) {
+	handler, _ := newTestOAuthHandler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?code=abc", nil)
+	handler.GoogleCallback(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got status %d", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "http://localhost:3000/login?google=error" {
+		t.Errorf("expected error redirect, got %q", got)
+	}
+}
+
+func TestGoogleCallbackStateMismatch(t *testing.T) {
+	handler, _ := newTestOAuthHandler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?code=abc&state=wrong", nil)
+	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "correct"})
+	handler.GoogleCallback(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got status %d", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "http://localhost:3000/login?google=error" {
+		t.Errorf("expected error redirect, got %q", got)
+	}
+}
+
+func TestGoogleCallbackSuccess(t *testing.T) {
+	handler, store := newTestOAuthHandler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?code=abc&state=abc123", nil)
+	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "abc123"})
+	handler.GoogleCallback(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got status %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "http://localhost:3000/" {
+		t.Errorf("expected redirect to app root, got %q", got)
+	}
+
+	cookies := rec.Result().Cookies()
+	var hasSession bool
+	for _, c := range cookies {
+		if c.Name == session.CookieName && c.Value != "" {
+			hasSession = true
+		}
+	}
+	if !hasSession {
+		t.Errorf("expected session cookie, got %v", cookies)
+	}
+
+	if len(store.users) != 1 || store.users[0].Email != "a@b.com" {
+		t.Errorf("expected the google user to be created, got %+v", store.users)
+	}
+	if _, ok := store.oauthLinks["google:google-id-1"]; !ok {
+		t.Error("expected oauth account to be linked")
+	}
+}
+
+func TestGoogleCallbackFailureDoesNotSetSession(t *testing.T) {
+	handler, _ := newTestOAuthHandler()
+	handler.service.google = &fakeGoogleClient{exchangeErr: errors.New("boom")}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?code=abc&state=abc123", nil)
+	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "abc123"})
+	handler.GoogleCallback(rec, req)
+
+	if got := rec.Header().Get("Location"); got != "http://localhost:3000/login?google=error" {
+		t.Errorf("expected error redirect, got %q", got)
+	}
+	if strings.Contains(rec.Header().Get("Set-Cookie"), session.CookieName+"=") {
+		t.Error("must not set a session cookie on failure")
+	}
 }

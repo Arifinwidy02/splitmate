@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -15,14 +18,25 @@ import (
 	"github.com/Arifinwidy02/splitmate-backend/pkg/response"
 )
 
+const oauthStateCookie = "oauth_state"
+const oauthStateTTL = 10 * time.Minute
+
+type OAuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	AppBaseURL   string
+}
+
 type Handler struct {
 	service       *Service
 	tokens        *session.TokenService
 	secureCookies bool
+	oauth         *OAuthConfig
 }
 
-func NewHandler(service *Service, tokens *session.TokenService, secureCookies bool) *Handler {
-	return &Handler{service: service, tokens: tokens, secureCookies: secureCookies}
+func NewHandler(service *Service, tokens *session.TokenService, secureCookies bool, oauth *OAuthConfig) *Handler {
+	return &Handler{service: service, tokens: tokens, secureCookies: secureCookies, oauth: oauth}
 }
 
 type registerRequest struct {
@@ -95,6 +109,103 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	h.clearSessionCookie(w)
 	response.WriteJSON(w, http.StatusOK, logoutResponse{})
+}
+
+func (h *Handler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+	if h.oauth == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "GOOGLE_NOT_CONFIGURED", "Google sign in is not configured")
+		return
+	}
+
+	state, err := randomState()
+	if err != nil {
+		slog.Error("failed to generate oauth state", "error", err)
+		response.WriteError(w, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    state,
+		Path:     "/",
+		MaxAge:   int(oauthStateTTL.Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   h.secureCookies,
+	})
+
+	http.Redirect(w, r, googleAuthURL(h.oauth.ClientID, h.oauth.RedirectURL, state), http.StatusFound)
+}
+
+func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
+	stateCookie, err := r.Cookie(oauthStateCookie)
+	if err != nil {
+		h.redirectOAuthFailure(w, r, "missing oauth state")
+		return
+	}
+	h.clearOAuthStateCookie(w)
+
+	if h.oauth == nil {
+		h.redirectOAuthFailure(w, r, "oauth not configured")
+		return
+	}
+
+	state := r.URL.Query().Get("state")
+	if subtle.ConstantTimeCompare([]byte(state), []byte(stateCookie.Value)) != 1 {
+		h.redirectOAuthFailure(w, r, "oauth state mismatch")
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		h.redirectOAuthFailure(w, r, "missing authorization code")
+		return
+	}
+
+	u, err := h.service.GoogleLogin(r.Context(), code, h.oauth.RedirectURL, h.oauth.ClientID, h.oauth.ClientSecret)
+	if err != nil {
+		h.redirectOAuthFailure(w, r, err.Error())
+		return
+	}
+
+	token, expiresAt, err := h.tokens.Issue(u.ID)
+	if err != nil {
+		slog.Error("failed to issue session token", "error", err)
+		h.redirectOAuthFailure(w, r, "session token failed")
+		return
+	}
+
+	h.setSessionCookie(w, token, expiresAt)
+	http.Redirect(w, r, h.oauth.AppBaseURL+"/", http.StatusFound)
+}
+
+func (h *Handler) redirectOAuthFailure(w http.ResponseWriter, r *http.Request, reason string) {
+	slog.Warn("google oauth callback failed", "reason", reason)
+	if h.oauth == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "GOOGLE_NOT_CONFIGURED", "Google sign in is not configured")
+		return
+	}
+	http.Redirect(w, r, h.oauth.AppBaseURL+"/login?google=error", http.StatusFound)
+}
+
+func (h *Handler) clearOAuthStateCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   h.secureCookies,
+	})
+}
+
+func randomState() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import { register, type AuthActionState } from "@/app/actions/auth";
+import GoogleButton from "@/components/google-button";
 
 export default function RegisterForm() {
   const [state, action, pending] = useActionState<AuthActionState, FormData>(
@@ -12,7 +13,14 @@ export default function RegisterForm() {
   );
 
   return (
-    <form action={action} className="mt-6 flex flex-col gap-4">
+    <>
+      <GoogleButton />
+      <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+        <span className="h-px flex-1 bg-slate-200" />
+        or
+        <span className="h-px flex-1 bg-slate-200" />
+      </div>
+      <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="name" className="text-sm font-medium text-slate-700">
           Name
@@ -80,6 +88,7 @@ export default function RegisterForm() {
           Sign in
         </Link>
       </p>
-    </form>
+      </form>
+    </>
   );
 }

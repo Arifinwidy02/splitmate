@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -13,7 +14,8 @@ import (
 )
 
 type fakeStore struct {
-	users []*user.User
+	users      []*user.User
+	oauthLinks map[string]uuid.UUID
 }
 
 func (f *fakeStore) Create(ctx context.Context, name, email, passwordHash string) (*user.User, error) {
@@ -51,12 +53,63 @@ func (f *fakeStore) FindByID(ctx context.Context, id uuid.UUID) (*user.User, err
 	return nil, user.ErrNotFound
 }
 
+func (f *fakeStore) FindByOAuthAccount(ctx context.Context, provider, providerAccountID string) (*user.User, error) {
+	userID, ok := f.oauthLinks[provider+":"+providerAccountID]
+	if !ok {
+		return nil, user.ErrNotFound
+	}
+	return f.FindByID(ctx, userID)
+}
+
+func (f *fakeStore) CreateWithOAuth(ctx context.Context, name, email string, avatarURL *string, provider, providerAccountID string) (*user.User, error) {
+	for _, u := range f.users {
+		if u.Email == email {
+			return nil, user.ErrEmailTaken
+		}
+	}
+
+	u := &user.User{
+		ID:        uuid.New(),
+		Name:      name,
+		Email:     email,
+		AvatarURL: avatarURL,
+	}
+	f.users = append(f.users, u)
+	f.oauthLinks[provider+":"+providerAccountID] = u.ID
+	return u, nil
+}
+
+func (f *fakeStore) LinkOAuthAccount(ctx context.Context, userID uuid.UUID, provider, providerAccountID string) error {
+	f.oauthLinks[provider+":"+providerAccountID] = userID
+	return nil
+}
+
+type fakeGoogleClient struct {
+	exchangeErr error
+	profile     *GoogleProfile
+	profileErr  error
+}
+
+func (f *fakeGoogleClient) ExchangeCode(ctx context.Context, code, redirectURL, clientID, clientSecret string) (string, error) {
+	if f.exchangeErr != nil {
+		return "", f.exchangeErr
+	}
+	return "access-token", nil
+}
+
+func (f *fakeGoogleClient) FetchProfile(ctx context.Context, accessToken string) (*GoogleProfile, error) {
+	if f.profileErr != nil {
+		return nil, f.profileErr
+	}
+	return f.profile, nil
+}
+
 func newTestService(store userStore) *Service {
 	return NewService(store)
 }
 
 func TestRegisterInvalidInput(t *testing.T) {
-	svc := newTestService(&fakeStore{})
+	svc := newTestService(&fakeStore{oauthLinks: map[string]uuid.UUID{}})
 
 	tests := []struct {
 		name     string
@@ -87,7 +140,7 @@ func TestRegisterInvalidInput(t *testing.T) {
 }
 
 func TestRegisterSuccess(t *testing.T) {
-	store := &fakeStore{}
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
 	svc := newTestService(store)
 
 	u, err := svc.Register(context.Background(), "  Arifin  ", "Arifin@Example.com", "password123")
@@ -110,7 +163,7 @@ func TestRegisterSuccess(t *testing.T) {
 }
 
 func TestRegisterEmailTaken(t *testing.T) {
-	store := &fakeStore{}
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
 	svc := newTestService(store)
 
 	if _, err := svc.Register(context.Background(), "Arifin", "a@b.com", "password123"); err != nil {
@@ -124,7 +177,7 @@ func TestRegisterEmailTaken(t *testing.T) {
 }
 
 func TestLoginInvalidCredentials(t *testing.T) {
-	store := &fakeStore{}
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
 	svc := newTestService(store)
 
 	if _, err := svc.Register(context.Background(), "Arifin", "a@b.com", "password123"); err != nil {
@@ -152,7 +205,7 @@ func TestLoginInvalidCredentials(t *testing.T) {
 }
 
 func TestLoginSuccess(t *testing.T) {
-	store := &fakeStore{}
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
 	svc := newTestService(store)
 
 	if _, err := svc.Register(context.Background(), "Arifin", "a@b.com", "password123"); err != nil {
@@ -169,11 +222,133 @@ func TestLoginSuccess(t *testing.T) {
 }
 
 func TestGetUserNotFound(t *testing.T) {
-	svc := newTestService(&fakeStore{})
+	svc := newTestService(&fakeStore{oauthLinks: map[string]uuid.UUID{}})
 
 	_, err := svc.GetUser(context.Background(), uuid.New())
 	if err != user.ErrNotFound {
 		t.Errorf("expected user.ErrNotFound, got %v", err)
+	}
+}
+
+func TestFindOrCreateByOAuthCreatesNewUser(t *testing.T) {
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
+	svc := newTestService(store)
+
+	avatar := "https://example.com/avatar.png"
+	u, err := svc.FindOrCreateByOAuth(context.Background(), "google", "google-id-1", "Google@Example.com", "Google User", &avatar)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if u.Email != "google@example.com" {
+		t.Errorf("expected lowercased email, got %q", u.Email)
+	}
+	if u.Name != "Google User" {
+		t.Errorf("expected name, got %q", u.Name)
+	}
+	if u.AvatarURL == nil || *u.AvatarURL != avatar {
+		t.Errorf("expected avatar, got %v", u.AvatarURL)
+	}
+	if u.PasswordHash != "" {
+		t.Error("oauth user must not have a password hash")
+	}
+	if _, ok := store.oauthLinks["google:google-id-1"]; !ok {
+		t.Error("expected oauth account to be linked")
+	}
+}
+
+func TestFindOrCreateByOAuthReusesExistingOAuthAccount(t *testing.T) {
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
+	svc := newTestService(store)
+
+	first, err := svc.FindOrCreateByOAuth(context.Background(), "google", "google-id-1", "a@b.com", "User", nil)
+	if err != nil {
+		t.Fatalf("first call failed: %v", err)
+	}
+
+	second, err := svc.FindOrCreateByOAuth(context.Background(), "google", "google-id-1", "changed@b.com", "Other", nil)
+	if err != nil {
+		t.Fatalf("second call failed: %v", err)
+	}
+
+	if first.ID != second.ID {
+		t.Error("expected the same user for the same oauth account")
+	}
+	if len(store.users) != 1 {
+		t.Errorf("expected exactly 1 user, got %d", len(store.users))
+	}
+}
+
+func TestFindOrCreateByOAuthLinksToExistingEmail(t *testing.T) {
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
+	svc := newTestService(store)
+
+	registered, err := svc.Register(context.Background(), "Arifin", "a@b.com", "password123")
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	u, err := svc.FindOrCreateByOAuth(context.Background(), "google", "google-id-2", "a@b.com", "Arifin", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if u.ID != registered.ID {
+		t.Error("expected the oauth login to resolve to the existing email user")
+	}
+	if _, ok := store.oauthLinks["google:google-id-2"]; !ok {
+		t.Error("expected oauth account to be linked to the existing user")
+	}
+	if len(store.users) != 1 {
+		t.Errorf("expected no new user to be created, got %d users", len(store.users))
+	}
+}
+
+func TestFindOrCreateByOAuthMissingEmail(t *testing.T) {
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
+	svc := newTestService(store)
+
+	_, err := svc.FindOrCreateByOAuth(context.Background(), "google", "google-id-3", "   ", "User", nil)
+	if err != ErrOAuthEmailMissing {
+		t.Errorf("expected ErrOAuthEmailMissing, got %v", err)
+	}
+}
+
+func TestGoogleLoginSuccess(t *testing.T) {
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
+	svc := newTestService(store)
+	svc.google = &fakeGoogleClient{
+		profile: &GoogleProfile{ID: "google-id-1", Email: "a@b.com", Name: "Google User"},
+	}
+
+	u, err := svc.GoogleLogin(context.Background(), "auth-code", "http://localhost:3000/callback", "client-id", "client-secret")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if u.Email != "a@b.com" {
+		t.Errorf("expected email a@b.com, got %q", u.Email)
+	}
+}
+
+func TestGoogleLoginExchangeFailure(t *testing.T) {
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
+	svc := newTestService(store)
+	svc.google = &fakeGoogleClient{exchangeErr: errors.New("token endpoint down")}
+
+	_, err := svc.GoogleLogin(context.Background(), "auth-code", "http://localhost:3000/callback", "client-id", "client-secret")
+	if !errors.Is(err, ErrOAuthExchangeFailed) {
+		t.Errorf("expected ErrOAuthExchangeFailed, got %v", err)
+	}
+}
+
+func TestGoogleLoginProfileWithoutEmail(t *testing.T) {
+	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
+	svc := newTestService(store)
+	svc.google = &fakeGoogleClient{profile: &GoogleProfile{ID: "google-id-1"}}
+
+	_, err := svc.GoogleLogin(context.Background(), "auth-code", "http://localhost:3000/callback", "client-id", "client-secret")
+	if err != ErrOAuthEmailMissing {
+		t.Errorf("expected ErrOAuthEmailMissing, got %v", err)
 	}
 }
 

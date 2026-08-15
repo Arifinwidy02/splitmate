@@ -10,10 +10,14 @@ import (
 )
 
 type Config struct {
-	Port        int
-	AppEnv      string
-	DatabaseURL string
-	JWTSecret   string
+	Port               int
+	AppEnv             string
+	DatabaseURL        string
+	JWTSecret          string
+	GoogleClientID     string
+	GoogleClientSecret string
+	OAuthRedirectURL   string
+	AppBaseURL         string
 }
 
 func Load() (*Config, error) {
@@ -30,11 +34,19 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Port:        port,
-		AppEnv:      envString("APP_ENV", "development"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		JWTSecret:   jwtSecret,
+		Port:               port,
+		AppEnv:             envString("APP_ENV", "development"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		JWTSecret:          jwtSecret,
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		OAuthRedirectURL:   os.Getenv("OAUTH_REDIRECT_URL"),
+		AppBaseURL:         os.Getenv("APP_BASE_URL"),
 	}, nil
+}
+
+func (c *Config) GoogleOAuthEnabled() bool {
+	return c.GoogleClientID != "" && c.GoogleClientSecret != "" && c.OAuthRedirectURL != "" && c.AppBaseURL != ""
 }
 
 func loadDotEnv() {
