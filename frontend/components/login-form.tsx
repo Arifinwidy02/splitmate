@@ -14,13 +14,7 @@ export default function LoginForm({ initialError }: { initialError?: string }) {
 
   return (
     <>
-      <GoogleButton />
-      <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
-        <span className="h-px flex-1 bg-slate-200" />
-        or
-        <span className="h-px flex-1 bg-slate-200" />
-      </div>
-      <form action={action} className="flex flex-col gap-4">
+      <form action={action} className="mt-6 flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="email" className="text-sm font-medium text-slate-700">
           Email
@@ -73,6 +67,12 @@ export default function LoginForm({ initialError }: { initialError?: string }) {
         </Link>
       </p>
       </form>
+      <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+        <span className="h-px flex-1 bg-slate-200" />
+        or
+        <span className="h-px flex-1 bg-slate-200" />
+      </div>
+      <GoogleButton />
     </>
   );
 }
