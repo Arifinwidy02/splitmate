@@ -20,7 +20,10 @@ function cookieAttributes(name: string) {
   };
 }
 
-export async function proxy(request: NextRequest) {
+// Next 16 renamed middleware.ts -> proxy.ts, but proxy.ts is not executed
+// on Vercel production builds (vercel/next.js#86241, #86303). Keep the
+// deprecated middleware.ts convention so the silent refresh runs everywhere.
+export async function middleware(request: NextRequest) {
   const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
 
