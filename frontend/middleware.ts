@@ -23,6 +23,10 @@ function cookieAttributes(name: string) {
 // Next 16 renamed middleware.ts -> proxy.ts, but proxy.ts is not executed
 // on Vercel production builds (vercel/next.js#86241, #86303). Keep the
 // deprecated middleware.ts convention so the silent refresh runs everywhere.
+// Vercel file-convention middleware defaults to the Edge runtime where it
+// silently never executes; the Node.js runtime is the community-confirmed fix.
+export const runtime = "nodejs";
+
 export async function middleware(request: NextRequest) {
   const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
