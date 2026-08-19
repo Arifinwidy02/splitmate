@@ -1,105 +1,34 @@
-import { API_URL } from "./api";
-
-const ACCESS_TOKEN_COOKIE = "access_token";
-const REFRESH_TOKEN_COOKIE = "refresh_token";
-
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
 let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
+let refreshFailed = false;
+const refreshWaiters: (() => void)[] = [];
 
-function subscribeTokenRefresh(callback: (token: string) => void) {
-  refreshSubscribers.push(callback);
-}
-
-function onTokenRefreshed(token: string) {
-  refreshSubscribers.forEach((callback) => callback(token));
-  refreshSubscribers = [];
-}
-
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) {
-    return parts.pop()?.split(";").shift() || null;
-  }
-  return null;
-}
-
-function setCookie(name: string, value: string, maxAge: number) {
-  if (typeof document === "undefined") return;
-
-  document.cookie = `${name}=${value}; path=/; max-age=${maxAge}; SameSite=${
-    name === REFRESH_TOKEN_COOKIE ? "Strict" : "Lax"
-  }; ${process.env.NODE_ENV === "production" ? "Secure" : ""}`;
-}
-
-function clearCookie(name: string) {
-  if (typeof document === "undefined") return;
-
-  document.cookie = `${name}=; path=/; max-age=0; SameSite=${
-    name === REFRESH_TOKEN_COOKIE ? "Strict" : "Lax"
-  }; ${process.env.NODE_ENV === "production" ? "Secure" : ""}`;
-}
-
-async function refreshAccessToken(): Promise<string> {
-  const refreshToken = getCookie(REFRESH_TOKEN_COOKIE);
-  if (!refreshToken) {
-    throw new Error("No refresh token available");
-  }
-
-  const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+/**
+ * Tokens are HttpOnly cookies, so they are never readable from
+ * `document.cookie`. The refresh endpoint runs on the same origin (via the
+ * Next.js rewrite proxy), so the browser sends the refresh token cookie
+ * automatically and stores the new cookies from the response.
+ */
+async function refreshAccessToken(): Promise<boolean> {
+  const res = await fetch("/api/v1/auth/refresh", {
     method: "POST",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
   });
+  return res.ok;
+}
 
-  if (!res.ok) {
-    // Clear cookies on refresh failure
-    clearCookie(ACCESS_TOKEN_COOKIE);
-    clearCookie(REFRESH_TOKEN_COOKIE);
-    throw new Error("Failed to refresh token");
+function redirectToLogin() {
+  if (typeof window !== "undefined") {
+    // Hard navigation is intentional: this runs outside React event handlers,
+    // and a full reload ensures a fresh server-side session check after the
+    // tokens have been cleared by the backend.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = "/login";
   }
-
-  const setCookies = res.headers.getSetCookie();
-
-  const accessToken = setCookies
-    .map((c) => {
-      if (c.startsWith(`${ACCESS_TOKEN_COOKIE}=`)) {
-        return c.slice(`${ACCESS_TOKEN_COOKIE}=`.length).split(";")[0];
-      }
-      return null;
-    })
-    .find((v) => v !== null);
-
-  const newRefreshToken = setCookies
-    .map((c) => {
-      if (c.startsWith(`${REFRESH_TOKEN_COOKIE}=`)) {
-        return c.slice(`${REFRESH_TOKEN_COOKIE}=`.length).split(";")[0];
-      }
-      return null;
-    })
-    .find((v) => v !== null);
-
-  if (accessToken) {
-    setCookie(ACCESS_TOKEN_COOKIE, accessToken, 15 * 60); // 15 minutes
-  }
-
-  if (newRefreshToken) {
-    setCookie(REFRESH_TOKEN_COOKIE, newRefreshToken, 7 * 24 * 60 * 60); // 7 days
-  }
-
-  if (!accessToken) {
-    throw new Error("No access token in refresh response");
-  }
-
-  return accessToken;
 }
 
 export async function apiFetch(
@@ -108,17 +37,11 @@ export async function apiFetch(
 ): Promise<Response> {
   const { skipAuth = false, ...fetchOptions } = options;
 
-  let accessToken = getCookie(ACCESS_TOKEN_COOKIE);
-
-  const makeRequest = async (token: string | null): Promise<Response> => {
+  const makeRequest = (): Promise<Response> => {
     const headers: Record<string, string> = {
-      ...(fetchOptions.headers as Record<string, string>),
       "Content-Type": "application/json",
+      ...(fetchOptions.headers as Record<string, string>),
     };
-
-    if (token && !skipAuth) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
 
     return fetch(url, {
       ...fetchOptions,
@@ -127,32 +50,35 @@ export async function apiFetch(
     });
   };
 
-  let response = await makeRequest(accessToken);
+  let response = await makeRequest();
 
-  // If we get a 401 and we have a refresh token, try to refresh
-  if (response.status === 401 && !skipAuth && getCookie(REFRESH_TOKEN_COOKIE)) {
+  // If we get a 401, try to refresh the access token once and retry.
+  if (response.status === 401 && !skipAuth) {
     if (isRefreshing) {
-      // Wait for the current refresh to complete
-      return new Promise((resolve, reject) => {
-        subscribeTokenRefresh((token) => {
-          makeRequest(token).then(resolve).catch(reject);
-        });
-      });
-    }
-
-    isRefreshing = true;
-    try {
-      const newToken = await refreshAccessToken();
-      onTokenRefreshed(newToken);
-      response = await makeRequest(newToken);
-    } catch (error) {
-      // Refresh failed, redirect to login
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
+      // Another request is already refreshing; wait for it and retry.
+      await new Promise<void>((resolve) => refreshWaiters.push(resolve));
+      if (refreshFailed) {
+        redirectToLogin();
+        throw new Error("Failed to refresh token");
       }
-      throw error;
-    } finally {
-      isRefreshing = false;
+      response = await makeRequest();
+    } else {
+      isRefreshing = true;
+      refreshFailed = false;
+      try {
+        refreshFailed = !(await refreshAccessToken());
+        if (refreshFailed) {
+          throw new Error("Failed to refresh token");
+        }
+        refreshWaiters.splice(0).forEach((resolve) => resolve());
+        response = await makeRequest();
+      } catch (error) {
+        refreshWaiters.splice(0).forEach((resolve) => resolve());
+        redirectToLogin();
+        throw error;
+      } finally {
+        isRefreshing = false;
+      }
     }
   }
 
@@ -160,9 +86,5 @@ export async function apiFetch(
 }
 
 export function logoutClient() {
-  clearCookie(ACCESS_TOKEN_COOKIE);
-  clearCookie(REFRESH_TOKEN_COOKIE);
-  if (typeof window !== "undefined") {
-    window.location.href = "/login";
-  }
+  redirectToLogin();
 }

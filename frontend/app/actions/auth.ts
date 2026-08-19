@@ -5,33 +5,26 @@ import { redirect } from "next/navigation";
 
 import { API_URL } from "@/lib/api";
 import { getDict } from "@/lib/i18n";
+import {
+  ACCESS_TOKEN_COOKIE,
+  ACCESS_TOKEN_MAX_AGE,
+  REFRESH_TOKEN_COOKIE,
+  REFRESH_TOKEN_MAX_AGE,
+  extractTokenFromSetCookie,
+} from "@/lib/tokens";
 
 export type AuthActionState = { error?: string } | undefined;
-
-const ACCESS_TOKEN_COOKIE = "access_token";
-const REFRESH_TOKEN_COOKIE = "refresh_token";
-const ACCESS_TOKEN_MAX_AGE = 15 * 60; // 15 minutes
-const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60; // 7 days
-
-function extractCookieValue(
-  setCookie: string,
-  cookieName: string,
-): string | null {
-  if (!setCookie.startsWith(`${cookieName}=`)) return null;
-  const value = setCookie.slice(`${cookieName}=`.length).split(";")[0];
-  return value;
-}
 
 async function storeTokensFromResponse(res: Response) {
   const setCookies = res.headers.getSetCookie();
   const cookieStore = await cookies();
 
   const accessToken = setCookies
-    .map((c) => extractCookieValue(c, ACCESS_TOKEN_COOKIE))
+    .map((c) => extractTokenFromSetCookie(c, ACCESS_TOKEN_COOKIE))
     .find((v) => v !== null);
 
   const refreshToken = setCookies
-    .map((c) => extractCookieValue(c, REFRESH_TOKEN_COOKIE))
+    .map((c) => extractTokenFromSetCookie(c, REFRESH_TOKEN_COOKIE))
     .find((v) => v !== null);
 
   if (accessToken) {

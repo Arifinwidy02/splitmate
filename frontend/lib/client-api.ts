@@ -103,7 +103,19 @@ export async function createGroup(data: { name: string; description?: string; cu
   return body.data;
 }
 
-export async function createExpense(groupId: string, data: any): Promise<ExpenseDetail> {
+export type CreateExpenseInput = {
+  description: string;
+  amount: string;
+  currency: string;
+  paidBy: string;
+  category: string;
+  expenseDate: string;
+  splitType: string;
+  note?: string;
+  participants: string[];
+};
+
+export async function createExpense(groupId: string, data: CreateExpenseInput): Promise<ExpenseDetail> {
   const res = await apiFetch(`/api/v1/groups/${groupId}/expenses`, {
     method: "POST",
     body: JSON.stringify(data),
