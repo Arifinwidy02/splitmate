@@ -28,11 +28,11 @@ export async function middleware(request: NextRequest) {
   const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
 
   if (accessToken && !isAccessTokenExpired(accessToken)) {
-    return NextResponse.next();
+    return passThrough("access-ok");
   }
 
   if (!refreshToken) {
-    return NextResponse.next();
+    return passThrough("no-refresh");
   }
 
   let res: Response;
@@ -46,11 +46,11 @@ export async function middleware(request: NextRequest) {
       cache: "no-store",
     });
   } catch {
-    return NextResponse.next();
+    return passThrough("fetch-error");
   }
 
   if (!res.ok) {
-    return NextResponse.next();
+    return passThrough(`refresh-failed-${res.status}`);
   }
 
   const setCookies = res.headers.getSetCookie();
@@ -62,7 +62,7 @@ export async function middleware(request: NextRequest) {
     .find((v) => v !== null);
 
   if (!newAccessToken) {
-    return NextResponse.next();
+    return passThrough("no-access");
   }
 
   request.cookies.set(ACCESS_TOKEN_COOKIE, newAccessToken);
@@ -76,7 +76,15 @@ export async function middleware(request: NextRequest) {
   if (newRefreshToken) {
     response.cookies.set(REFRESH_TOKEN_COOKIE, newRefreshToken, cookieAttributes(REFRESH_TOKEN_COOKIE));
   }
+  response.headers.set("x-splitmate-mw", "refreshed");
 
+  return response;
+}
+
+function passThrough(reason: string) {
+  const response = NextResponse.next();
+  response.headers.set("x-splitmate-mw", reason);
+  response.headers.set("x-splitmate-api", API_URL);
   return response;
 }
 
