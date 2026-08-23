@@ -13,7 +13,7 @@ export default function Error(props: {
   const dict = dictionaries[getClientLocale()];
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col items-center rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+    <div className="mx-auto flex w-full max-w-md flex-col items-center rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-card">
       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
         <TriangleAlert className="h-6 w-6 text-red-600" aria-hidden="true" />
       </span>

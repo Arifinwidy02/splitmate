@@ -97,7 +97,7 @@ export default function InviteForm({ groupId, dict }: { groupId: string; dict: D
                 <span className="min-w-0 flex-1 truncate text-xs text-green-800">
                   {inv.email}
                 </span>
-                <code className="min-w-0 flex-[2] break-all rounded-lg bg-white px-3 py-1.5 text-xs text-slate-800">
+                <code className="min-w-0 flex-[2] break-all rounded-lg bg-white px-3 py-1.5 font-mono text-xs text-slate-800">
                   {inv.token}
                 </code>
                 <button

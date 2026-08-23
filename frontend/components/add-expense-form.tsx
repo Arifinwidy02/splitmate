@@ -194,7 +194,7 @@ export default function AddExpenseForm({
               type="button"
               onClick={() => setSplitType(value)}
               aria-pressed={splitType === value}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                 splitType === value
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
