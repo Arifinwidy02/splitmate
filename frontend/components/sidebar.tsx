@@ -7,7 +7,9 @@ import { LayoutDashboard, Users } from "lucide-react";
 import type { Dict } from "@/lib/i18n/id";
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
+  if (href === "/dashboard") {
+    return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -15,14 +17,14 @@ export default function Sidebar({ dict }: { dict: Dict }) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: "/", label: dict.nav.dashboard, icon: LayoutDashboard },
+    { href: "/dashboard", label: dict.nav.dashboard, icon: LayoutDashboard },
     { href: "/groups", label: dict.nav.groups, icon: Users },
   ];
 
   return (
     <>
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col border-r border-slate-200 bg-white px-4 py-6 lg:flex">
-        <Link href="/" className="flex items-center gap-2 px-2">
+        <Link href="/dashboard" className="flex items-center gap-2 px-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-600 text-sm font-bold text-white">
             S
           </span>

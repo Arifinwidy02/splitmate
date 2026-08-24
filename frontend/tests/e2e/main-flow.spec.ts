@@ -107,7 +107,7 @@ test("complete journey: register → group → invite → expense → balance �
   await expect(owner.getByText("Settled").first()).toBeVisible();
 
   // Dashboard reflects the expense and settlement totals.
-  await owner.goto("/");
+  await owner.goto("/dashboard");
   await expect(owner.getByText("E2E Trip", { exact: true }).first()).toBeVisible();
   await expect(owner.getByText("Rp200.000").first()).toBeVisible();
 

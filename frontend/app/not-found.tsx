@@ -15,7 +15,7 @@ export default async function NotFound() {
         <h1 className="mt-4 text-xl font-bold text-slate-900">{dict.notFound.title}</h1>
         <p className="mt-1 text-sm text-slate-500">{dict.notFound.body}</p>
         <Link
-          href="/"
+          href="/dashboard"
           className="mt-5 inline-block rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
         >
           {dict.notFound.backToDashboard}

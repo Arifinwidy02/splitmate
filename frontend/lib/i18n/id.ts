@@ -207,6 +207,38 @@ export const id = {
     body: "Halaman yang kamu cari tidak ada atau kamu tidak memiliki akses.",
     backToDashboard: "Kembali ke dasbor",
   },
+  landing: {
+    heroTitle: "Catat. Bagi. Lunasi.",
+    heroSubtitle:
+      "Catat pengeluaran grup, pantau siapa berutang ke siapa, dan lunasi semuanya di satu tempat.",
+    heroAria: "Pengenalan SplitMate",
+    heroChip: "Dimas melunasi Rp860.000",
+    howTitle: "Cara kerjanya",
+    step1Title: "Buat grup",
+    step1Body: "Undang teman, keluarga, atau tim ke satu grup bersama.",
+    step2Title: "Catat pengeluaran",
+    step2Body: "Siapa bayar apa dan siapa ikut bayar, semuanya tercatat.",
+    step3Title: "Saldo otomatis",
+    step3Body:
+      "SplitMate menghitung saldo dan menyederhanakan utang sehingga kamu tahu cukup bayar ke siapa.",
+    previewTitle: "Tampilan dasbor",
+    previewCaption: "Contoh tampilan dengan data contoh.",
+    previewExpensesTitle: "Pengeluaran terbaru",
+    previewBalancesTitle: "Saldo",
+    previewMembers: "4 anggota",
+    featuresTitle: "Semua yang kamu butuhkan untuk berbagi biaya",
+    feat1Title: "Saldo dihitung otomatis",
+    feat1Body: "Setiap pengeluaran langsung memperbarui saldo semua anggota.",
+    feat2Title: "Utang disederhanakan",
+    feat2Body: "Jumlah transfer diminimalkan, jadi kamu cukup bayar ke satu orang.",
+    feat3Title: "Nota & ekspor Excel",
+    feat3Body: "Simpan foto nota dan unduh laporan grup kapan saja.",
+    feat4Title: "Bahasa Indonesia & English",
+    feat4Body: "Gunakan SplitMate dalam dua bahasa, masuk dengan Google.",
+    ctaTitle: "Mulai bagi pengeluaran hari ini.",
+    ctaBody: "Gratis untuk grup teman, keluarga, dan tim.",
+    footerTagline: "Pengelola pengeluaran bersama untuk teman, keluarga, dan tim.",
+  },
 };
 
 export type Dict = Omit<typeof id, "locale"> & { locale: Locale };
