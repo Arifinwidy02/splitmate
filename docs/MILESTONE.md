@@ -351,6 +351,36 @@ Register
 
 ---
 
+# Milestone 11 — Public Landing Page
+
+### Goal
+
+Explain the product to new visitors before asking them to sign in.
+
+### Tasks
+
+- [x] Public landing page at `/` (hero, how-it-works, example dashboard preview)
+- [x] Move authenticated dashboard from `/` to `/dashboard`
+- [x] Forward session-carrying visitors from `/` to `/dashboard` (also covers the
+      Google OAuth callback, which redirects to `APP_BASE_URL + "/"`)
+- [x] Update internal links/redirects (sidebar, login action, 404 CTA, auth header)
+- [x] Bilingual copy (`landing` section in `lib/i18n/{id,en}.ts`)
+- [x] Landing page metadata (title + description) as the app's SEO surface
+
+### Notes
+
+- The preview renders real `Card` components with sample data, labeled as an
+  example; amounts use the shared `formatCurrency` helper.
+- E2E journey updated: dashboard assertions now target `/dashboard`.
+- Landing redesign (taste skill, Preserve mode): kinetic 3-word hero with
+  staggered word entrance, floating settlement chip, dashboard preview card
+  overlapping the hero, horizontal how-it-works steps, 4-cell feature bento
+  with mini-UIs, green CTA band, sticky blur header, grain overlay. Motion is
+  CSS keyframes + `components/reveal.tsx` (IntersectionObserver); no new
+  dependencies; all motion disabled under `prefers-reduced-motion`.
+
+---
+
 # Recommended Coding Order
 
 ```text

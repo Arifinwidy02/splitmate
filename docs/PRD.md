@@ -185,6 +185,19 @@ Group Balance Becomes Zero
 
 The dashboard is the primary landing page after authentication.
 
+## Public Landing Page
+
+Unauthenticated visitors who open the root URL (`/`) see a public landing page that explains the product:
+
+- kinetic hero (headline, subtext, sign-up / sign-in CTAs, photo with a floating
+  settled-payment chip)
+- a short "how it works" section (create group, add expenses, balances are calculated automatically)
+- an example dashboard preview using sample data, clearly labeled as an example
+- a feature grid (auto balances, debt simplification, receipts and export, bilingual UI)
+- a closing call-to-action band
+
+Visitors with an existing session cookie are forwarded from `/` to `/dashboard`. The authenticated dashboard lives at `/dashboard`.
+
 ## Header
 
 Display:
