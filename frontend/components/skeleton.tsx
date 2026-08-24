@@ -2,7 +2,7 @@ export function SkeletonCard({ className = "" }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={`animate-pulse rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}
+      className={`animate-pulse rounded-2xl border border-slate-200 bg-white p-5 shadow-card ${className}`}
     >
       <div className="h-4 w-24 rounded bg-slate-200" />
       <div className="mt-3 h-8 w-36 rounded bg-slate-200" />

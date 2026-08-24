@@ -3,6 +3,7 @@ import { Plus, Users } from "lucide-react";
 
 import CreateGroupForm from "@/components/create-group-form";
 import DeleteGroupButton from "@/components/delete-group-button";
+import { Card, CardHeader } from "@/components/card";
 import { GroupLogo } from "@/components/group-logo";
 import JoinGroupForm from "@/components/join-group-form";
 import Toast from "@/components/toast";
@@ -25,14 +26,14 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
     <div className="mx-auto w-full max-w-[1440px]">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[32px] font-bold text-slate-900">{dict.groups.title}</h1>
+          <h1 className="text-display font-bold text-slate-900">{dict.groups.title}</h1>
           <p className="mt-1 text-sm text-slate-500">
             {dict.groups.subtitle}
           </p>
         </div>
         <Link
           href="#create-group"
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98]"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           {dict.groups.newGroup}
@@ -40,13 +41,13 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <section
+        <Card
           aria-labelledby="group-list-heading"
-          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2"
+          className="xl:col-span-2"
         >
-          <h2 id="group-list-heading" className="text-xl font-semibold text-slate-900">
+          <CardHeader id="group-list-heading">
             {dict.groups.yourGroups}
-          </h2>
+          </CardHeader>
 
           {groups.length === 0 ? (
             <div className="py-12 text-center">
@@ -90,36 +91,32 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
               ))}
             </ul>
           )}
-        </section>
+        </Card>
 
         <div className="flex flex-col gap-6">
-          <section
+          <Card
             id="create-group"
             aria-labelledby="create-group-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <h2 id="create-group-heading" className="text-xl font-semibold text-slate-900">
+            <CardHeader id="create-group-heading">
               {dict.groups.createGroup}
-            </h2>
+            </CardHeader>
             <div className="mt-4">
               <CreateGroupForm dict={dict} />
             </div>
-          </section>
+          </Card>
 
-          <section
-            aria-labelledby="join-group-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2 id="join-group-heading" className="text-xl font-semibold text-slate-900">
+          <Card aria-labelledby="join-group-heading">
+            <CardHeader id="join-group-heading">
               {dict.groups.joinGroup}
-            </h2>
+            </CardHeader>
             <p className="mt-1 text-sm text-slate-500">
               {dict.groups.joinSubtitle}
             </p>
             <div className="mt-4">
               <JoinGroupForm dict={dict} />
             </div>
-          </section>
+          </Card>
         </div>
       </div>
 

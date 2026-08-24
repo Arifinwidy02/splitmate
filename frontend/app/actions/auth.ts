@@ -79,7 +79,7 @@ export async function login(
   }
 
   await storeTokensFromResponse(res);
-  redirect("/?success=signed-in");
+  redirect("/dashboard?success=signed-in");
 }
 
 export async function register(

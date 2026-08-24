@@ -14,7 +14,7 @@ export default function Loading() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
           <div className="h-6 w-40 rounded bg-slate-200" />
           <div className="mt-4">
             <SkeletonRow />
@@ -22,7 +22,7 @@ export default function Loading() {
             <SkeletonRow />
           </div>
         </div>
-        <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
           <div className="h-6 w-44 rounded bg-slate-200" />
           <div className="mt-4">
             <SkeletonRow />

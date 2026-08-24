@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import AddExpenseForm from "@/components/add-expense-form";
+import { Card, CardHeader } from "@/components/card";
 import { CategoryIcon } from "@/components/category-icon";
 import DeleteExpenseButton from "@/components/delete-expense-button";
 import DeleteGroupButton from "@/components/delete-group-button";
@@ -111,7 +112,7 @@ export default async function GroupDetailPage({
             imgClassName="h-12 w-12 rounded-2xl object-cover"
           />
           <div>
-            <h1 className="text-[32px] font-bold leading-tight text-slate-900">
+            <h1 className="text-display font-bold leading-tight text-slate-900">
               {group.name}
             </h1>
             <p className="text-sm text-slate-500">
@@ -122,7 +123,7 @@ export default async function GroupDetailPage({
           </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-card">
             <p className="text-xs text-slate-500">{dict.group.yourBalance}</p>
             <p
               className={`text-lg font-bold ${
@@ -145,14 +146,14 @@ export default async function GroupDetailPage({
           )}
           <a
             href={`/api/v1/groups/${group.id}/export`}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
           >
             <FileDown className="h-4 w-4" aria-hidden="true" />
             {dict.group.exportReport}
           </a>
           <a
             href="#add-expense"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
             {dict.group.addExpense}
@@ -162,17 +163,11 @@ export default async function GroupDetailPage({
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="flex flex-col gap-6 xl:col-span-2">
-          <section
-            aria-labelledby="balances-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
+          <Card aria-labelledby="balances-heading">
             <div className="flex items-center justify-between">
-              <h2
-                id="balances-heading"
-                className="text-xl font-semibold text-slate-900"
-              >
+              <CardHeader id="balances-heading">
                 {dict.group.balances}
-              </h2>
+              </CardHeader>
               <span className="text-xs font-medium text-slate-400">
                 {dict.group.updatedFrom}
               </span>
@@ -221,18 +216,12 @@ export default async function GroupDetailPage({
                 ))}
               </ul>
             )}
-          </section>
+          </Card>
 
-          <section
-            aria-labelledby="expenses-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2
-              id="expenses-heading"
-              className="text-xl font-semibold text-slate-900"
-            >
+          <Card aria-labelledby="expenses-heading">
+            <CardHeader id="expenses-heading">
               {dict.group.expenses}
-            </h2>
+            </CardHeader>
 
             {expenses.length === 0 ? (
               <div className="py-8 text-center">
@@ -304,21 +293,17 @@ export default async function GroupDetailPage({
                 ))}
               </ul>
             )}
-          </section>
+          </Card>
         </div>
 
         <div className="flex flex-col gap-6">
-          <section
+          <Card
             id="add-expense"
             aria-labelledby="add-expense-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <h2
-              id="add-expense-heading"
-              className="text-xl font-semibold text-slate-900"
-            >
+            <CardHeader id="add-expense-heading">
               {dict.group.addExpense}
-            </h2>
+            </CardHeader>
             <div className="mt-4">
               <AddExpenseForm
                 groupId={group.id}
@@ -328,22 +313,19 @@ export default async function GroupDetailPage({
                 dict={dict}
               />
             </div>
-          </section>
+          </Card>
 
-          <section
-            aria-labelledby="settle-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2
+          <Card aria-labelledby="settle-heading">
+            <CardHeader
               id="settle-heading"
-              className="flex items-center gap-2 text-xl font-semibold text-slate-900"
+              className="flex items-center gap-2"
             >
               <HandCoins
                 className="h-5 w-5 text-green-700"
                 aria-hidden="true"
               />
               {dict.group.settleUp}
-            </h2>
+            </CardHeader>
             <div className="mt-3">
               {suggestions.length === 0 ? (
                 <p className="text-sm text-slate-500">
@@ -369,19 +351,16 @@ export default async function GroupDetailPage({
                 />
               )}
             </div>
-          </section>
+          </Card>
 
-          <section
-            aria-labelledby="members-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2
+          <Card aria-labelledby="members-heading">
+            <CardHeader
               id="members-heading"
-              className="flex items-center gap-2 text-xl font-semibold text-slate-900"
+              className="flex items-center gap-2"
             >
               <Users className="h-5 w-5 text-slate-400" aria-hidden="true" />
               {dict.group.members}
-            </h2>
+            </CardHeader>
 
             <ul className="mt-4 flex flex-col">
               {members.map((m, i) => (
@@ -428,19 +407,13 @@ export default async function GroupDetailPage({
                 </div>
               </div>
             )}
-          </section>
+          </Card>
 
           {settlements.length > 0 && (
-            <section
-              aria-labelledby="settlement-history-heading"
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            >
-              <h2
-                id="settlement-history-heading"
-                className="text-xl font-semibold text-slate-900"
-              >
+            <Card aria-labelledby="settlement-history-heading">
+              <CardHeader id="settlement-history-heading">
                 {dict.group.settlementHistory}
-              </h2>
+              </CardHeader>
               <ul className="mt-3 flex flex-col">
                 {settlements.map((s, i) => (
                   <li
@@ -464,7 +437,7 @@ export default async function GroupDetailPage({
                   </li>
                 ))}
               </ul>
-            </section>
+            </Card>
           )}
         </div>
       </div>

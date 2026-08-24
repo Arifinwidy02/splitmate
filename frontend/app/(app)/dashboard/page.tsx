@@ -9,6 +9,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { Card, CardHeader } from "@/components/card";
 import { CategoryIcon } from "@/components/category-icon";
 import { GroupLogo } from "@/components/group-logo";
 import Toast from "@/components/toast";
@@ -42,12 +43,12 @@ function SummaryCard({
       : "text-slate-900";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
       <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
         <Icon className="h-4 w-4" aria-hidden="true" />
         {label}
       </div>
-      <p className={`mt-2 text-[28px] font-bold leading-tight ${tone}`}>
+      <p className={`mt-2 text-amount font-bold ${tone}`}>
         {formatCurrency(amount, currency)}
       </p>
     </div>
@@ -119,7 +120,7 @@ export default async function DashboardPage({
     <div className="mx-auto w-full max-w-[1440px]">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-[32px] font-bold text-slate-900">
+          <h1 className="text-display font-bold text-slate-900">
             {tr(dict.dashboard.welcome, { name: user.name.split(" ")[0] })}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -128,7 +129,7 @@ export default async function DashboardPage({
         </div>
         <Link
           href="/groups"
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98]"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           {dict.dashboard.addExpense}
@@ -155,14 +156,11 @@ export default async function DashboardPage({
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <section
-          aria-labelledby="recent-groups-heading"
-          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-        >
+        <Card aria-labelledby="recent-groups-heading">
           <div className="flex items-center justify-between">
-            <h2 id="recent-groups-heading" className="text-xl font-semibold text-slate-900">
+            <CardHeader id="recent-groups-heading">
               {dict.dashboard.recentGroups}
-            </h2>
+            </CardHeader>
             <Link href="/groups" className="inline-flex items-center gap-1 text-sm font-medium text-green-700 hover:underline">
               {dict.dashboard.viewAll} <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
@@ -209,16 +207,13 @@ export default async function DashboardPage({
               ))
             )}
           </ul>
-        </section>
+        </Card>
 
-        <section
-          aria-labelledby="recent-expenses-heading"
-          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-        >
+        <Card aria-labelledby="recent-expenses-heading">
           <div className="flex items-center justify-between">
-            <h2 id="recent-expenses-heading" className="text-xl font-semibold text-slate-900">
+            <CardHeader id="recent-expenses-heading">
               {dict.dashboard.recentExpenses}
-            </h2>
+            </CardHeader>
           </div>
 
           <ul className="mt-4 flex flex-col">
@@ -253,18 +248,15 @@ export default async function DashboardPage({
               ))
             )}
           </ul>
-        </section>
+        </Card>
       </div>
 
       {hasData && (
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <section
-            aria-labelledby="balance-overview-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2 id="balance-overview-heading" className="text-xl font-semibold text-slate-900">
+          <Card aria-labelledby="balance-overview-heading">
+            <CardHeader id="balance-overview-heading">
               {dict.dashboard.balanceOverview}
-            </h2>
+            </CardHeader>
 
             <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <BalanceRow label={dict.dashboard.owedToYou} amount={summary.owedToUser} positive />
@@ -272,19 +264,16 @@ export default async function DashboardPage({
               <BalanceRow label={dict.dashboard.settled} amount={summary.settledAmount} neutral />
               <BalanceRow label={dict.dashboard.netBalance} amount={summary.netBalance} />
             </dl>
-          </section>
+          </Card>
 
-          <section
-            aria-labelledby="categories-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2 id="categories-heading" className="text-xl font-semibold text-slate-900">
+          <Card aria-labelledby="categories-heading">
+            <CardHeader id="categories-heading">
               {dict.dashboard.expenseCategories}
-            </h2>
+            </CardHeader>
             <div className="mt-5">
               <CategoryChart categories={categories} currency="IDR" dict={dict} />
             </div>
-          </section>
+          </Card>
         </div>
       )}
       <Toast success={success} dict={dict} />

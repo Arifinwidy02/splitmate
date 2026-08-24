@@ -7,7 +7,7 @@ import type { Locale } from "@/lib/i18n/constants";
 export default function AuthHeader({ locale }: { locale: Locale }) {
   return (
     <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-      <Link href="/login" className="flex items-center gap-2" aria-label="SplitMate">
+      <Link href="/" className="flex items-center gap-2" aria-label="SplitMate">
         <Image
           src="/splitmate_logo.png"
           alt=""

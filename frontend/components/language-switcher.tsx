@@ -13,7 +13,7 @@ export default function LanguageSwitcher({ current }: { current: Locale }) {
   };
 
   const buttonClass = (active: boolean) =>
-    `rounded-md px-2 py-1 font-semibold transition ${
+    `rounded-lg px-2 py-1 font-semibold transition ${
       active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
     }`;
 

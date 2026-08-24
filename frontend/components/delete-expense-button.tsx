@@ -39,7 +39,7 @@ export default function DeleteExpenseButton({
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`${dict.group.deleteExpense} ${description}`}
-        className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+        className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
       >
         <Trash2 className="h-4 w-4" aria-hidden="true" />
       </button>
