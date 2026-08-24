@@ -8,6 +8,7 @@ export const en: Dict = {
     you: "(you)",
     or: "or",
     optional: "(optional)",
+    and: "and",
   },
   auth: {
     welcomeBack: "Welcome back",
@@ -128,8 +129,8 @@ export const en: Dict = {
     viewReceiptTitle: "View receipt",
     settleUp: "Settle up",
     nothingToSettle: "Nothing to settle — you're all caught up.",
-    youHaveToReceive:
-      "You are owed {amount}. Suggest payment from {names} or wait for them to record it.",
+    youHaveToReceive: "You are owed {debts}.",
+    receiveFromItem: "{amount} from {name}",
     members: "Members",
     admin: "admin",
     inviteMember: "Invite member",

@@ -90,6 +90,28 @@ export default async function GroupDetailPage({
   const pendingSettlements = suggestions.filter(
     (s) => s.fromUserId === user.id,
   );
+
+  const debtsToMe = suggestions
+    .filter((s) => s.toUserId === user.id)
+    .map((s) => {
+      const name = members.find((m) => m.id === s.fromUserId)?.name;
+      return name
+        ? tr(dict.group.receiveFromItem, {
+            name,
+            amount: formatCurrency(s.amount, group.currency),
+          })
+        : null;
+    })
+    .filter((d): d is string => d !== null);
+  const debtsText =
+    debtsToMe.length > 0
+      ? debtsToMe.length === 1
+        ? debtsToMe[0]
+        : `${debtsToMe.slice(0, -1).join(", ")} ${dict.common.and} ${
+            debtsToMe[debtsToMe.length - 1]
+          }`
+      : formatCurrency(myBalance, group.currency);
+
   const isAdmin = group.role === "admin";
 
   return (
@@ -333,13 +355,7 @@ export default async function GroupDetailPage({
                 </p>
               ) : pendingSettlements.length === 0 && myBalance !== "0.00" ? (
                 <p className="text-sm text-slate-500">
-                  {tr(dict.group.youHaveToReceive, {
-                    amount: formatCurrency(myBalance, group.currency),
-                    names: members
-                      .filter((m) => m.id !== user.id)
-                      .map((m) => m.name)
-                      .join(", "),
-                  })}
+                  {tr(dict.group.youHaveToReceive, { debts: debtsText })}
                 </p>
               ) : (
                 <SettlePanel

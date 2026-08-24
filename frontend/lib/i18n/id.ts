@@ -8,6 +8,7 @@ export const id = {
     you: "(kamu)",
     or: "atau",
     optional: "(opsional)",
+    and: "dan",
   },
   auth: {
     welcomeBack: "Selamat datang kembali",
@@ -129,8 +130,8 @@ export const id = {
     viewReceiptTitle: "Lihat nota",
     settleUp: "Lunasi",
     nothingToSettle: "Tidak ada yang perlu dilunasi — semua sudah beres.",
-    youHaveToReceive:
-      "Kamu berhak menerima {amount}. Sarankan pembayaran ke {names} atau tunggu mereka mencatatnya.",
+    youHaveToReceive: "Kamu berhak menerima uang {debts}.",
+    receiveFromItem: "dari {name} sebesar {amount}",
     members: "Anggota",
     admin: "admin",
     inviteMember: "Undang anggota",
