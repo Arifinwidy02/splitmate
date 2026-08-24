@@ -12,11 +12,13 @@ import { tr } from "@/lib/i18n/tr";
 
 function SettleAction({
   groupId,
+  payerId,
   receiverId,
   amount,
   dict,
 }: {
   groupId: string;
+  payerId: string;
   receiverId: string;
   amount?: string;
   dict: Dict;
@@ -28,6 +30,7 @@ function SettleAction({
 
   return (
     <form action={action} className="flex flex-col gap-3">
+      <input type="hidden" name="payerId" value={payerId} />
       <input type="hidden" name="receiverId" value={receiverId} />
       <input type="hidden" name="amount" value={amount ?? ""} />
       {state?.error && (
@@ -52,11 +55,15 @@ function SettleAction({
 
 function SettleForm({
   groupId,
+  myUserId,
   others,
+  isAdmin,
   dict,
 }: {
   groupId: string;
+  myUserId: string;
   others: Member[];
+  isAdmin: boolean;
   dict: Dict;
 }) {
   const [state, action, pending] = useActionState(
@@ -67,8 +74,29 @@ function SettleForm({
   return (
     <form action={action} className="mt-2 flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
+        <label htmlFor="settle-payer" className="text-sm font-medium text-slate-700">
+          {dict.settle.payer}
+        </label>
+        <select
+          id="settle-payer"
+          name="payerId"
+          required
+          defaultValue={myUserId}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-600/20"
+        >
+          <option value={myUserId}>{dict.settle.me}</option>
+          {isAdmin &&
+            others.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
         <label htmlFor="settle-receiver" className="text-sm font-medium text-slate-700">
-          {dict.settle.iPaidBack}
+          {dict.settle.receiver}
         </label>
         <select
           id="settle-receiver"
@@ -126,38 +154,51 @@ export default function SettlePanel({
   members,
   myUserId,
   suggestions,
+  isAdmin,
   dict,
 }: {
   groupId: string;
   members: Member[];
   myUserId: string;
   suggestions: Suggestion[];
+  isAdmin?: boolean;
   dict: Dict;
 }) {
   const others = members.filter((m) => m.id !== myUserId);
-  const mySuggestions = suggestions.filter((s) => s.fromUserId === myUserId);
+  const visibleSuggestions = isAdmin
+    ? suggestions
+    : suggestions.filter((s) => s.fromUserId === myUserId);
 
   return (
     <div className="flex flex-col gap-4">
-      {mySuggestions.length > 0 && (
+      {visibleSuggestions.length > 0 && (
         <div>
           <p className="text-sm font-medium text-slate-700">{dict.settle.quickSettle}</p>
           <ul className="mt-2 flex flex-col">
-            {mySuggestions.map((s) => {
+            {visibleSuggestions.map((s) => {
+              const payer = members.find((m) => m.id === s.fromUserId);
               const receiver = members.find((m) => m.id === s.toUserId);
+              const label =
+                s.fromUserId === myUserId
+                  ? tr(dict.settle.youOwe, {
+                      name: receiver?.name ?? dict.settle.aMember,
+                    })
+                  : tr(dict.settle.owesTo, {
+                      from: payer?.name ?? dict.settle.aMember,
+                      to: receiver?.name ?? dict.settle.aMember,
+                    });
               return (
                 <li
-                  key={`${s.toUserId}-${s.amount}`}
+                  key={`${s.fromUserId}-${s.toUserId}-${s.amount}`}
                   className="flex items-center justify-between gap-3 border-t border-slate-100 py-3"
                 >
                   <div className="text-sm">
-                    <p className="font-medium text-slate-900">
-                      {tr(dict.settle.youOwe, { name: receiver?.name ?? dict.settle.aMember })}
-                    </p>
+                    <p className="font-medium text-slate-900">{label}</p>
                     <p className="text-slate-500">{formatCurrency(s.amount)}</p>
                   </div>
                   <SettleAction
                     groupId={groupId}
+                    payerId={s.fromUserId}
                     receiverId={s.toUserId}
                     amount={s.amount}
                     dict={dict}
@@ -173,7 +214,13 @@ export default function SettlePanel({
         <p className="text-sm font-medium text-slate-700">
           {dict.settle.recordPaymentTitle}
         </p>
-        <SettleForm groupId={groupId} others={others} dict={dict} />
+        <SettleForm
+          groupId={groupId}
+          myUserId={myUserId}
+          others={others}
+          isAdmin={Boolean(isAdmin)}
+          dict={dict}
+        />
       </div>
     </div>
   );

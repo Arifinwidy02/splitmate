@@ -125,6 +125,54 @@ func TestCreateSettlementHandlerForbidden(t *testing.T) {
 	}
 }
 
+func TestCreateSettlementHandlerAdminOnBehalf(t *testing.T) {
+	h, _, gs := newTestHandler()
+	g := uuid.New()
+	admin, a, b := uuid.New(), uuid.New(), uuid.New()
+	gs.memberships[g.String()+":"+admin.String()] = group.RoleAdmin
+	memberMap(gs, g, a, b)
+
+	body := map[string]any{
+		"payerId":    a.String(),
+		"receiverId": b.String(),
+		"amount":     "1000.00",
+	}
+
+	rec := doRequest(t, h.Create, http.MethodPost, "/groups/"+g.String()+"/settlements", body, admin)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			PayerID uuid.UUID `json:"payerId"`
+		} `json:"data"`
+	}
+	decodeData(t, rec, &resp)
+	if resp.Data.PayerID != a {
+		t.Errorf("expected payer %v, got %v", a, resp.Data.PayerID)
+	}
+}
+
+func TestCreateSettlementHandlerAdminNonMemberPayer(t *testing.T) {
+	h, _, gs := newTestHandler()
+	g := uuid.New()
+	admin, b := uuid.New(), uuid.New()
+	gs.memberships[g.String()+":"+admin.String()] = group.RoleAdmin
+	gs.memberships[g.String()+":"+b.String()] = group.RoleMember
+
+	body := map[string]any{
+		"payerId":    uuid.New().String(),
+		"receiverId": b.String(),
+		"amount":     "1000.00",
+	}
+
+	rec := doRequest(t, h.Create, http.MethodPost, "/groups/"+g.String()+"/settlements", body, admin)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestCreateSettlementHandlerNonMember(t *testing.T) {
 	h, _, gs := newTestHandler()
 	g := uuid.New()

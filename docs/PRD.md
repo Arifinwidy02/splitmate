@@ -440,7 +440,8 @@ Examples:
 - A user cannot view another private group.
 - A user cannot add an expense to a group they do not belong to.
 - A group member cannot remove an admin unless allowed.
-- A user cannot settle another user's debt arbitrarily.
+- A user cannot settle another user's debt arbitrarily; only the payer or a
+  group admin may record a settlement.
 
 Authorization must be enforced by the Go backend, not only by the Next.js frontend.
 

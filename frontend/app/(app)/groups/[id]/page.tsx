@@ -353,7 +353,7 @@ export default async function GroupDetailPage({
                 <p className="text-sm text-slate-500">
                   {dict.group.nothingToSettle}
                 </p>
-              ) : pendingSettlements.length === 0 && myBalance !== "0.00" ? (
+              ) : pendingSettlements.length === 0 && !isAdmin && myBalance !== "0.00" ? (
                 <p className="text-sm text-slate-500">
                   {tr(dict.group.youHaveToReceive, { debts: debtsText })}
                 </p>
@@ -363,6 +363,7 @@ export default async function GroupDetailPage({
                   members={members}
                   myUserId={user.id}
                   suggestions={suggestions}
+                  isAdmin={isAdmin}
                   dict={dict}
                 />
               )}

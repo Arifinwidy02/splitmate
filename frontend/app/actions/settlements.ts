@@ -27,6 +27,7 @@ export async function createSettlement(
 
   const amount = String(formData.get("amount") ?? "");
   const receiverId = String(formData.get("receiverId") ?? "");
+  const payerId = String(formData.get("payerId") ?? "") || user.id;
   const settledAt = String(formData.get("settledAt") ?? "").trim();
 
   try {
@@ -34,7 +35,7 @@ export async function createSettlement(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        payerId: user.id,
+        payerId,
         receiverId,
         amount,
         settledAt: settledAt || undefined,
