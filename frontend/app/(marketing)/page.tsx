@@ -78,7 +78,7 @@ export default async function LandingPage() {
 
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-gradient-to-b from-white/95 via-white/85 to-white/60 sm:bg-gradient-to-r sm:from-white sm:via-white/90 sm:to-transparent"
+          className="absolute inset-0 bg-gradient-to-r from-white via-white/25 to-transparent"
         />
 
         <div className="relative w-full py-16 pl-6 pr-6 sm:py-24 sm:pl-12 lg:pl-16">

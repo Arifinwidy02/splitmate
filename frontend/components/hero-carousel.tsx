@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const SLIDES = [
   { src: "/traveling.jpg", alt: "Friends traveling together" },
@@ -85,23 +84,6 @@ export function HeroCarousel() {
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/35 to-transparent"
       />
-
-      <button
-        type="button"
-        onClick={() => go(index - 1)}
-        aria-label="Previous slide"
-        className="absolute right-14 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm transition hover:bg-white sm:flex"
-      >
-        <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        onClick={() => go(index + 1)}
-        aria-label="Next slide"
-        className="absolute right-4 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm transition hover:bg-white sm:flex"
-      >
-        <ChevronRight className="h-5 w-5" aria-hidden="true" />
-      </button>
 
       <div className="absolute bottom-4 right-4 flex items-center justify-center gap-2">
         {SLIDES.map((slide, i) => (
