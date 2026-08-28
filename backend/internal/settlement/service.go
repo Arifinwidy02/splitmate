@@ -32,15 +32,22 @@ func NewService(repo store, groupStore groupStore) *Service {
 	return &Service{repo: repo, groupStore: groupStore}
 }
 
-// CreateSettlement records a repayment. Only the payer can record the
-// settlement (a user cannot settle another user's debt).
+// CreateSettlement records a repayment. The payer can record their own
+// settlement, and a group admin can record a settlement on behalf of any
+// member (e.g. when someone forgot to settle up).
 func (s *Service) CreateSettlement(ctx context.Context, userID, groupID uuid.UUID, input CreateSettlementInput) (*Settlement, error) {
-	if _, err := s.groupStore.FindMembership(ctx, groupID, userID); err != nil {
+	membership, err := s.groupStore.FindMembership(ctx, groupID, userID)
+	if err != nil {
 		return nil, ErrGroupNotFound
 	}
 
 	if input.PayerID != userID {
-		return nil, ErrForbidden
+		if membership.Role != group.RoleAdmin {
+			return nil, ErrForbidden
+		}
+		if _, err := s.groupStore.FindMembership(ctx, groupID, input.PayerID); err != nil {
+			return nil, apperror.NewValidation("Payer must be a group member")
+		}
 	}
 
 	if input.PayerID == input.ReceiverID {

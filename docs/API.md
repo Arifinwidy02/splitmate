@@ -657,11 +657,12 @@ Request:
 
 Authorization and validation:
 
-- the authenticated user must be the payer (a user cannot settle another
-  user's debt) — `FORBIDDEN` otherwise
+- the authenticated user must be the payer, OR a group admin recording on
+  behalf of the payer (e.g. when someone forgot to settle up) — `FORBIDDEN`
+  otherwise
 - the authenticated user must be a group member — `GROUP_NOT_FOUND` otherwise
 - payer != receiver
-- receiver must be a group member
+- payer and receiver must be group members
 - amount > 0, at most 99,999,999,999.99
 
 Response (201):

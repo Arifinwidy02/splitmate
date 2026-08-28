@@ -148,6 +148,48 @@ func TestCreateSettlementAuthz(t *testing.T) {
 		}
 	})
 
+	t.Run("admin can settle on behalf of member", func(t *testing.T) {
+		svc, store, gs := newTestService()
+		g := uuid.New()
+		admin, a, b := uuid.New(), uuid.New(), uuid.New()
+		gs.memberships[g.String()+":"+admin.String()] = group.RoleAdmin
+		gs.memberships[g.String()+":"+a.String()] = group.RoleMember
+		gs.memberships[g.String()+":"+b.String()] = group.RoleMember
+
+		st, err := svc.CreateSettlement(context.Background(), admin, g, CreateSettlementInput{
+			PayerID:    a,
+			ReceiverID: b,
+			AmountSen:  1000,
+		})
+		if err != nil {
+			t.Fatalf("create settlement on behalf: %v", err)
+		}
+		if st.PayerID != a {
+			t.Errorf("expected payer %v, got %v", a, st.PayerID)
+		}
+		if len(store.settlements) != 1 {
+			t.Errorf("expected 1 settlement stored, got %d", len(store.settlements))
+		}
+	})
+
+	t.Run("admin cannot settle for non-member payer", func(t *testing.T) {
+		svc, _, gs := newTestService()
+		g := uuid.New()
+		admin, b := uuid.New(), uuid.New()
+		gs.memberships[g.String()+":"+admin.String()] = group.RoleAdmin
+		gs.memberships[g.String()+":"+b.String()] = group.RoleMember
+
+		_, err := svc.CreateSettlement(context.Background(), admin, g, CreateSettlementInput{
+			PayerID:    uuid.New(),
+			ReceiverID: b,
+			AmountSen:  1000,
+		})
+		var valErr *apperror.Validation
+		if !errors.As(err, &valErr) {
+			t.Fatalf("expected validation error, got %v", err)
+		}
+	})
+
 	t.Run("receiver not member rejected", func(t *testing.T) {
 		_, err := svc.CreateSettlement(context.Background(), a, g, CreateSettlementInput{
 			PayerID:    a,
