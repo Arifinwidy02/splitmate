@@ -36,7 +36,7 @@ export function HeroCarousel() {
       role="region"
       aria-roledescription="carousel"
       aria-label="Shared moments with SplitMate"
-      className="relative aspect-[4/3] touch-pan-y overflow-hidden rounded-2xl border border-slate-200 shadow-card"
+      className="absolute inset-0 touch-pan-y overflow-hidden"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
@@ -90,7 +90,7 @@ export function HeroCarousel() {
         type="button"
         onClick={() => go(index - 1)}
         aria-label="Previous slide"
-        className="absolute left-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm transition hover:bg-white sm:flex"
+        className="absolute right-14 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm transition hover:bg-white sm:flex"
       >
         <ChevronLeft className="h-5 w-5" aria-hidden="true" />
       </button>
@@ -98,12 +98,12 @@ export function HeroCarousel() {
         type="button"
         onClick={() => go(index + 1)}
         aria-label="Next slide"
-        className="absolute right-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm transition hover:bg-white sm:flex"
+        className="absolute right-4 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm transition hover:bg-white sm:flex"
       >
         <ChevronRight className="h-5 w-5" aria-hidden="true" />
       </button>
 
-      <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2">
+      <div className="absolute bottom-4 right-4 flex items-center justify-center gap-2">
         {SLIDES.map((slide, i) => (
           <button
             key={slide.src}

@@ -72,15 +72,17 @@ export default async function LandingPage() {
     <div className="mx-auto w-full max-w-[1440px] px-4 pb-16 sm:px-6 sm:pb-24 lg:px-8">
       <section
         aria-label={dict.landing.heroAria}
-        className="relative overflow-hidden py-16 pb-24 sm:py-24 sm:pb-32"
+        className="relative isolate flex min-h-[560px] items-center overflow-hidden rounded-3xl sm:min-h-[640px]"
       >
+        <HeroCarousel />
+
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-24 top-16 h-80 w-80 rounded-full bg-green-100/70 blur-3xl"
+          className="absolute inset-0 bg-gradient-to-b from-white/95 via-white/85 to-white/60 sm:bg-gradient-to-r sm:from-white sm:via-white/90 sm:to-transparent"
         />
 
-        <div className="relative grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
-          <div>
+        <div className="relative w-full py-16 pl-6 pr-6 sm:py-24 sm:pl-12 lg:pl-16">
+          <div className="max-w-xl">
             <h1 className="text-5xl font-bold leading-[1.05] tracking-tighter text-slate-900 sm:text-6xl">
               {heroWords.map((word, i) => (
                 <span
@@ -95,7 +97,7 @@ export default async function LandingPage() {
               ))}
             </h1>
             <p
-              className="animate-hero-word mt-6 max-w-md text-lg leading-relaxed text-slate-600"
+              className="animate-hero-word mt-6 max-w-md text-lg leading-relaxed text-slate-700"
               style={{ animationDelay: "420ms" }}
             >
               {dict.landing.heroSubtitle}
@@ -112,26 +114,26 @@ export default async function LandingPage() {
               </Link>
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white/90 px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white active:scale-[0.98]"
               >
                 {dict.auth.signIn}
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>
           </div>
+        </div>
 
-          <div className="animate-hero-word relative" style={{ animationDelay: "200ms" }}>
-            <HeroCarousel />
-            <div aria-hidden="true" className="chip-float absolute -bottom-5 -left-3 sm:-left-6">
-              <div className="chip-in flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-lg">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-green-50">
-                  <Check className="h-4 w-4 text-green-700" />
-                </span>
-                <span className="text-sm font-medium text-slate-800">
-                  {dict.landing.heroChip}
-                </span>
-              </div>
-            </div>
+        <div
+          aria-hidden="true"
+          className="chip-float absolute bottom-14 right-6 hidden lg:block"
+        >
+          <div className="chip-in flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-lg">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-green-50">
+              <Check className="h-4 w-4 text-green-700" />
+            </span>
+            <span className="text-sm font-medium text-slate-800">
+              {dict.landing.heroChip}
+            </span>
           </div>
         </div>
       </section>
