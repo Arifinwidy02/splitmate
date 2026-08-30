@@ -113,6 +113,7 @@ export async function register(
     };
   }
 
+  await storeTokensFromResponse(res);
   const nextUrl = getNextUrl(formData);
   redirect(nextUrl);
 }

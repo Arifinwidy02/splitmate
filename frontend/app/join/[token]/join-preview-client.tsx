@@ -29,6 +29,7 @@ export default function JoinPreviewClient({
   const [loading, setLoading] = useState(!initialPreview && !initialError);
   const [error, setError] = useState<string | null>(initialError);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [hasAutoJoined, setHasAutoJoined] = useState(false);
   const [joinState, joinAction, joinPending] = useActionState(joinGroupViaLink, undefined);
 
   const handleJoin = async () => {
@@ -72,6 +73,15 @@ export default function JoinPreviewClient({
       })
       .catch(() => setIsAuthed(false));
   }, []);
+
+  // Auto-join when user is authenticated and landed via ?next=/join/[token]
+  // This handles: Share link -> login/register with next -> redirect to /join -> auto join
+  useEffect(() => {
+    if (isAuthed && preview && !loading && !error && !hasAutoJoined && !joinPending) {
+      setHasAutoJoined(true);
+      handleJoin();
+    }
+  }, [isAuthed, preview, loading, error]);
 
   if (loading) {
     return (
