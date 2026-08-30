@@ -170,15 +170,17 @@ export async function joinGroupViaLink(
     return { error: dict.errors.tokenRequired };
   }
 
+  let groupId: string;
   try {
     const { group } = await apiFetch<{ group: GroupSummary }>(
       `/api/v1/invitations/${encodeURIComponent(token)}/join`,
       { method: "POST" },
     );
-    revalidatePath("/groups");
-    revalidatePath("/");
-    redirect(`/groups/${group.id}?success=group-joined`);
+    groupId = group.id;
   } catch (err) {
     return errorMessage(err);
   }
+  revalidatePath("/groups");
+  revalidatePath("/");
+  redirect(`/groups/${groupId}?success=group-joined`);
 }
