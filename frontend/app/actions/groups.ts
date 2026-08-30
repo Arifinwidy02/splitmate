@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { apiFetch } from "@/lib/server-api";
 import { getDict } from "@/lib/i18n";
-import type { GroupSummary } from "@/lib/api";
+import type { GroupSummary, InviteLink } from "@/lib/api";
 
 export type ActionState = { error?: string } | undefined;
 export type BulkInviteState =
@@ -15,6 +15,7 @@ export type BulkInviteState =
       failed?: { email: string; reason: string }[];
     }
   | undefined;
+export type InviteLinkState = { url: string } | ActionState;
 
 async function errorMessage(err: unknown): Promise<ActionState> {
   const dict = await getDict();
@@ -126,4 +127,58 @@ export async function deleteGroup(groupId: string): Promise<ActionState> {
   revalidatePath("/groups");
   revalidatePath("/");
   redirect("/groups?success=group-deleted");
+}
+
+export async function getOrCreateInviteLink(
+  groupId: string,
+): Promise<InviteLinkState> {
+  console.log('[DEBUG] getOrCreateInviteLink called for groupId:', groupId);
+  try {
+    const link = await apiFetch<InviteLink>(
+      `/api/v1/groups/${groupId}/invite-link`,
+      { method: "POST" },
+    );
+    console.log('[DEBUG] getOrCreateInviteLink success:', link.url);
+    return { url: link.url };
+  } catch (err) {
+    console.error('[DEBUG] getOrCreateInviteLink error:', err);
+    return errorMessage(err);
+  }
+}
+
+export async function revokeInviteLink(groupId: string): Promise<ActionState> {
+  try {
+    await apiFetch(`/api/v1/groups/${groupId}/invite-link`, {
+      method: "DELETE",
+    });
+  } catch (err) {
+    return errorMessage(err);
+  }
+
+  revalidatePath(`/groups/${groupId}`);
+  return undefined;
+}
+
+export async function joinGroupViaLink(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const token = String(formData.get("token") ?? "").trim();
+
+  if (!token) {
+    const dict = await getDict();
+    return { error: dict.errors.tokenRequired };
+  }
+
+  try {
+    const { group } = await apiFetch<{ group: GroupSummary }>(
+      `/api/v1/invitations/${encodeURIComponent(token)}/join`,
+      { method: "POST" },
+    );
+    revalidatePath("/groups");
+    revalidatePath("/");
+    redirect(`/groups/${group.id}?success=group-joined`);
+  } catch (err) {
+    return errorMessage(err);
+  }
 }

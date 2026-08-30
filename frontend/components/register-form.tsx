@@ -7,7 +7,13 @@ import { register, type AuthActionState } from "@/app/actions/auth";
 import GoogleButton from "@/components/google-button";
 import type { Dict } from "@/lib/i18n/id";
 
-export default function RegisterForm({ dict }: { dict: Dict }) {
+export default function RegisterForm({
+  dict,
+  next,
+}: {
+  dict: Dict;
+  next?: string;
+}) {
   const [state, action, pending] = useActionState<AuthActionState, FormData>(
     register,
     undefined,
@@ -16,6 +22,7 @@ export default function RegisterForm({ dict }: { dict: Dict }) {
   return (
     <>
       <form action={action} className="mt-6 flex flex-col gap-4">
+        <input type="hidden" name="next" value={next ?? "/dashboard"} />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="name" className="text-sm font-medium text-slate-700">
             {dict.auth.name}
@@ -83,7 +90,7 @@ export default function RegisterForm({ dict }: { dict: Dict }) {
         <p className="text-center text-sm text-slate-500">
           {dict.auth.alreadyAccount}{" "}
           <Link
-            href="/login"
+            href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
             className="font-medium text-green-600 hover:underline"
           >
             {dict.auth.signInLink}
@@ -95,7 +102,7 @@ export default function RegisterForm({ dict }: { dict: Dict }) {
         {dict.common.or}
         <span className="h-px flex-1 bg-slate-200" />
       </div>
-      <GoogleButton label={dict.auth.continueWithGoogle} />
+      <GoogleButton label={dict.auth.continueWithGoogle} next={next} />
     </>
   );
 }

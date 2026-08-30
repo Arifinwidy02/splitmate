@@ -58,6 +58,7 @@ func main() {
 			Session:       sessionService,
 			SecureCookies: cfg.AppEnv == "production",
 			OAuth:         oauth,
+			AppBaseURL:    cfg.AppBaseURL,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,

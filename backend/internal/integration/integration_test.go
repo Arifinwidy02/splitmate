@@ -64,10 +64,11 @@ func TestMain(m *testing.M) {
 	}
 	defer pool.Close()
 
-	tokenService := session.NewTokenService([]byte("integration-test-secret"), session.DefaultTokenTTL)
+	tokenService := session.NewTokenServiceWithDefaults([]byte("integration-test-secret"))
+	sessionService := session.NewService(tokenService, session.NewRepository(pool))
 	handler = server.New(server.Dependencies{
 		Pool:          pool,
-		TokenService:  tokenService,
+		Session:       sessionService,
 		SecureCookies: false,
 	})
 
@@ -335,7 +336,9 @@ func TestOAuthFindOrCreate(t *testing.T) {
 	authService := auth.NewService(userRepo)
 
 	email := uniqueEmail("oauth")
+	passEmail := uniqueEmail("pass")
 	providerID := fmt.Sprintf("google-acc-%d", time.Now().UnixNano())
+	linkProviderID := fmt.Sprintf("google-acc-link-%d", time.Now().UnixNano())
 
 	// New user created via oauth must succeed (regression: NULL password_hash).
 	created, err := authService.FindOrCreateByOAuth(ctx, "google", providerID, email, "OAuth User", nil)
@@ -363,12 +366,13 @@ func TestOAuthFindOrCreate(t *testing.T) {
 		t.Errorf("expected ErrInvalidCredentials for oauth-only user, got %v", err)
 	}
 
-	// A password user with the same email gets linked to the oauth account.
-	registered, err := authService.Register(ctx, "Password User", email, "password123")
+	// A password user registered first gets linked to the oauth account on
+	// a subsequent find-or-create with the same email and a distinct provider ID.
+	registered, err := authService.Register(ctx, "Password User", passEmail, "password123")
 	if err != nil {
 		t.Fatalf("register password user: %v", err)
 	}
-	linked, err := authService.FindOrCreateByOAuth(ctx, "google", providerID, email, "OAuth User", nil)
+	linked, err := authService.FindOrCreateByOAuth(ctx, "google", linkProviderID, passEmail, "OAuth User", nil)
 	if err != nil {
 		t.Fatalf("find or create after register: %v", err)
 	}
@@ -536,12 +540,12 @@ func TestAuthorization(t *testing.T) {
 	invitee.expect(http.MethodDelete, "/api/v1/expenses/"+exp["id"].(string), nil, http.StatusForbidden)
 	owner.expect(http.MethodDelete, "/api/v1/expenses/"+exp["id"].(string), nil, http.StatusOK)
 
-	// Only the payer (current user) may record a settlement.
+	// Admin can record a settlement on behalf of any member; members can record their own.
 	owner.expect(http.MethodPost, "/api/v1/groups/"+groupID+"/settlements", map[string]any{
 		"payerId":    inviteeID,
 		"receiverId": ownerID,
 		"amount":     "30000.00",
-	}, http.StatusForbidden)
+	}, http.StatusCreated)
 	invitee.expect(http.MethodPost, "/api/v1/groups/"+groupID+"/settlements", map[string]any{
 		"payerId":    inviteeID,
 		"receiverId": ownerID,

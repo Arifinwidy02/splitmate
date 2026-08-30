@@ -22,6 +22,7 @@ type Dependencies struct {
 	Session       *session.Service
 	SecureCookies bool
 	OAuth         *auth.OAuthConfig
+	AppBaseURL    string
 }
 
 func New(deps Dependencies) http.Handler {
@@ -31,7 +32,7 @@ func New(deps Dependencies) http.Handler {
 
 	groupRepo := group.NewRepository(deps.Pool)
 	groupService := group.NewService(groupRepo, userRepo)
-	groupHandler := group.NewHandler(groupService)
+	groupHandler := group.NewHandler(groupService, deps.AppBaseURL)
 
 	expenseRepo := expense.NewRepository(deps.Pool)
 	expenseService := expense.NewService(expenseRepo, groupRepo)
@@ -54,6 +55,7 @@ func New(deps Dependencies) http.Handler {
 	reportHandler := report.NewHandler(reportService)
 
 	requireAuth := middleware.RequireAuth(deps.Session)
+	optionalAuth := middleware.OptionalAuth(deps.Session)
 
 	mux := http.NewServeMux()
 
@@ -78,6 +80,10 @@ func New(deps Dependencies) http.Handler {
 	mux.Handle("POST /api/v1/groups/{groupId}/invitations", requireAuth(http.HandlerFunc(groupHandler.CreateInvitation)))
 	mux.Handle("POST /api/v1/groups/{groupId}/invitations/bulk", requireAuth(http.HandlerFunc(groupHandler.CreateBulkInvitations)))
 	mux.Handle("POST /api/v1/groups/invitations/{token}/accept", requireAuth(http.HandlerFunc(groupHandler.AcceptInvitation)))
+	mux.Handle("POST /api/v1/groups/{groupId}/invite-link", requireAuth(http.HandlerFunc(groupHandler.GetOrCreateInviteLink)))
+	mux.Handle("DELETE /api/v1/groups/{groupId}/invite-link", requireAuth(http.HandlerFunc(groupHandler.RevokeInviteLink)))
+	mux.Handle("GET /api/v1/invitations/{token}/preview", optionalAuth(http.HandlerFunc(groupHandler.PreviewInviteLink)))
+	mux.Handle("POST /api/v1/invitations/{token}/join", requireAuth(http.HandlerFunc(groupHandler.JoinGroupViaLink)))
 
 	mux.Handle("GET /api/v1/groups/{groupId}/expenses", requireAuth(http.HandlerFunc(expenseHandler.List)))
 	mux.Handle("POST /api/v1/groups/{groupId}/expenses", requireAuth(http.HandlerFunc(expenseHandler.Create)))

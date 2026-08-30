@@ -1,90 +1,48 @@
-interface FetchOptions extends RequestInit {
-  skipAuth?: boolean;
-}
+import { API_URL } from "./api";
 
-let isRefreshing = false;
-let refreshFailed = false;
-const refreshWaiters: (() => void)[] = [];
+export class ApiError extends Error {
+  code: string;
 
-/**
- * Tokens are HttpOnly cookies, so they are never readable from
- * `document.cookie`. The refresh endpoint runs on the same origin (via the
- * Next.js rewrite proxy), so the browser sends the refresh token cookie
- * automatically and stores the new cookies from the response.
- */
-async function refreshAccessToken(): Promise<boolean> {
-  const res = await fetch("/api/v1/auth/refresh", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-  });
-  return res.ok;
-}
-
-function redirectToLogin() {
-  if (typeof window !== "undefined") {
-    // Hard navigation is intentional: this runs outside React event handlers,
-    // and a full reload ensures a fresh server-side session check after the
-    // tokens have been cleared by the backend.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = "/login";
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
   }
 }
 
-export async function apiFetch(
-  url: string,
-  options: FetchOptions = {},
-): Promise<Response> {
-  const { skipAuth = false, ...fetchOptions } = options;
-
-  const makeRequest = (): Promise<Response> => {
-    const headers: Record<string, string> = {
+export async function apiFetchClient<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...init?.headers,
       "Content-Type": "application/json",
-      ...(fetchOptions.headers as Record<string, string>),
-    };
+    },
+    credentials: "include",
+    cache: "no-store",
+  });
 
-    return fetch(url, {
-      ...fetchOptions,
-      headers,
-      credentials: "include",
-    });
-  };
-
-  let response = await makeRequest();
-
-  // If we get a 401, try to refresh the access token once and retry.
-  if (response.status === 401 && !skipAuth) {
-    if (isRefreshing) {
-      // Another request is already refreshing; wait for it and retry.
-      await new Promise<void>((resolve) => refreshWaiters.push(resolve));
-      if (refreshFailed) {
-        redirectToLogin();
-        throw new Error("Failed to refresh token");
-      }
-      response = await makeRequest();
-    } else {
-      isRefreshing = true;
-      refreshFailed = false;
-      try {
-        refreshFailed = !(await refreshAccessToken());
-        if (refreshFailed) {
-          throw new Error("Failed to refresh token");
-        }
-        refreshWaiters.splice(0).forEach((resolve) => resolve());
-        response = await makeRequest();
-      } catch (error) {
-        refreshWaiters.splice(0).forEach((resolve) => resolve());
-        redirectToLogin();
-        throw error;
-      } finally {
-        isRefreshing = false;
-      }
-    }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(
+      body?.error?.code ?? "INTERNAL",
+      body?.error?.message ?? "Something went wrong. Please try again.",
+    );
   }
 
-  return response;
+  const body = (await res.json()) as { data: T };
+  return body.data;
 }
 
-export function logoutClient() {
-  redirectToLogin();
+// Function that returns Response for client-api.ts compatibility
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  return res;
 }

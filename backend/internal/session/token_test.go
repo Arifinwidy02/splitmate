@@ -9,7 +9,7 @@ import (
 )
 
 func TestTokenRoundTrip(t *testing.T) {
-	svc := NewTokenService([]byte("test-secret"), DefaultTokenTTL)
+	svc := NewTokenServiceWithDefaults([]byte("test-secret"))
 	userID := uuid.New()
 
 	token, expiresAt, err := svc.Issue(userID)
@@ -17,7 +17,7 @@ func TestTokenRoundTrip(t *testing.T) {
 		t.Fatalf("issue failed: %v", err)
 	}
 
-	if expiresAt.Before(time.Now().Add(DefaultTokenTTL - time.Minute)) {
+	if expiresAt.Before(time.Now().Add(AccessTokenTTL - time.Minute)) {
 		t.Errorf("unexpected expiry %v", expiresAt)
 	}
 
@@ -31,8 +31,8 @@ func TestTokenRoundTrip(t *testing.T) {
 }
 
 func TestTokenWrongSecret(t *testing.T) {
-	svc := NewTokenService([]byte("test-secret"), DefaultTokenTTL)
-	other := NewTokenService([]byte("other-secret"), DefaultTokenTTL)
+	svc := NewTokenServiceWithDefaults([]byte("test-secret"))
+	other := NewTokenServiceWithDefaults([]byte("other-secret"))
 
 	token, _, err := other.Issue(uuid.New())
 	if err != nil {
@@ -45,7 +45,7 @@ func TestTokenWrongSecret(t *testing.T) {
 }
 
 func TestTokenGarbage(t *testing.T) {
-	svc := NewTokenService([]byte("test-secret"), DefaultTokenTTL)
+	svc := NewTokenServiceWithDefaults([]byte("test-secret"))
 
 	if _, err := svc.Parse("not-a-jwt"); err == nil {
 		t.Error("expected parse error for garbage token")
@@ -54,7 +54,7 @@ func TestTokenGarbage(t *testing.T) {
 
 func TestTokenExpired(t *testing.T) {
 	secret := []byte("test-secret")
-	svc := NewTokenService(secret, DefaultTokenTTL)
+	svc := NewTokenServiceWithDefaults(secret)
 
 	claims := jwt.RegisteredClaims{
 		Subject:   uuid.New().String(),
@@ -73,7 +73,7 @@ func TestTokenExpired(t *testing.T) {
 
 func TestTokenWrongAlg(t *testing.T) {
 	secret := []byte("test-secret")
-	svc := NewTokenService(secret, DefaultTokenTTL)
+	svc := NewTokenServiceWithDefaults(secret)
 
 	none, err := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.RegisteredClaims{
 		Subject: uuid.New().String(),

@@ -19,7 +19,7 @@ import (
 
 func newTestHandler() (*Handler, *fakeStore, *fakeUsers) {
 	svc, store, users := newTestService()
-	return NewHandler(svc), store, users
+	return NewHandler(svc, "http://localhost:3000"), store, users
 }
 
 func doRequest(t *testing.T, fn func(http.ResponseWriter, *http.Request), method, path string, body any, userID uuid.UUID) *httptest.ResponseRecorder {

@@ -29,6 +29,8 @@ var (
 	ErrInvitationExpired   = errors.New("invitation expired")
 	ErrInvitationUsed      = errors.New("invitation already used")
 	ErrInvitationForbidden = errors.New("invitation is for a different email")
+	ErrInviteLinkRevoked   = errors.New("invite link revoked")
+	ErrInviteLinkLimit     = errors.New("invite link usage limit reached")
 	ErrNoLogo              = errors.New("group has no logo")
 )
 
@@ -37,6 +39,7 @@ const (
 	maxDescriptionLen = 500
 	maxEmailLen       = 255
 	maxBulkInvites    = 50
+	previewMemberCap  = 8
 )
 
 const (
@@ -429,6 +432,140 @@ func (s *Service) AcceptInvitation(ctx context.Context, userID uuid.UUID, token 
 	g.Role = RoleMember
 
 	return g, nil
+}
+
+func (s *Service) GetOrCreateInviteLink(ctx context.Context, userID, groupID uuid.UUID) (*InviteLink, error) {
+	if _, err := s.requireAdmin(ctx, groupID, userID); err != nil {
+		return nil, err
+	}
+
+	link, err := s.store.FindActiveInviteLink(ctx, groupID)
+	if err == nil {
+		return link, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return nil, fmt.Errorf("find active invite link: %w", err)
+	}
+
+	token, err := newInvitationToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate invite token: %w", err)
+	}
+
+	link = &InviteLink{
+		GroupID:   groupID,
+		Token:     token,
+		TokenHash: hashToken(token),
+		CreatedBy: userID,
+		ExpiresAt: time.Now().Add(invitationTTL),
+	}
+
+	if err := s.store.CreateInviteLink(ctx, link); err != nil {
+		return nil, fmt.Errorf("create invite link: %w", err)
+	}
+
+	return link, nil
+}
+
+func (s *Service) RevokeInviteLink(ctx context.Context, userID, groupID uuid.UUID) error {
+	if _, err := s.requireAdmin(ctx, groupID, userID); err != nil {
+		return err
+	}
+
+	if err := s.store.RevokeInviteLinks(ctx, groupID); err != nil {
+		return fmt.Errorf("revoke invite links: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) PreviewInviteLink(ctx context.Context, token string, viewerID *uuid.UUID) (*GroupPreview, bool, error) {
+	link, err := s.findValidInviteLink(ctx, token)
+	if err != nil {
+		return nil, false, err
+	}
+
+	preview, err := s.store.FindGroupPreview(ctx, link.GroupID)
+	if errors.Is(err, ErrNotFound) {
+		return nil, false, ErrGroupNotFound
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("find group preview: %w", err)
+	}
+	if len(preview.MemberNames) > previewMemberCap {
+		preview.MemberNames = preview.MemberNames[:previewMemberCap]
+	}
+
+	isMember := false
+	if viewerID != nil {
+		if _, err := s.store.FindMembership(ctx, link.GroupID, *viewerID); err == nil {
+			isMember = true
+		} else if !errors.Is(err, ErrNotFound) {
+			return nil, false, fmt.Errorf("find membership: %w", err)
+		}
+	}
+
+	return preview, isMember, nil
+}
+
+func (s *Service) JoinGroupViaLink(ctx context.Context, userID uuid.UUID, token string) (*Group, bool, error) {
+	link, err := s.findValidInviteLink(ctx, token)
+	if err != nil {
+		return nil, false, err
+	}
+
+	g, err := s.store.FindByID(ctx, link.GroupID)
+	if errors.Is(err, ErrNotFound) {
+		return nil, false, ErrGroupNotFound
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("find group: %w", err)
+	}
+	g.Role = RoleMember
+
+	if _, err := s.store.FindMembership(ctx, link.GroupID, userID); err == nil {
+		return g, true, nil
+	} else if !errors.Is(err, ErrNotFound) {
+		return nil, false, fmt.Errorf("find membership: %w", err)
+	}
+
+	if link.MaxUses != nil && link.UsedCount >= *link.MaxUses {
+		return nil, false, ErrInviteLinkLimit
+	}
+
+	if err := s.store.JoinViaInviteLink(ctx, link, userID); err != nil {
+		if errors.Is(err, ErrMemberExists) {
+			return g, true, nil
+		}
+		if errors.Is(err, ErrInviteLinkLimit) {
+			return nil, false, ErrInviteLinkLimit
+		}
+		return nil, false, fmt.Errorf("join via invite link: %w", err)
+	}
+
+	return g, false, nil
+}
+
+func (s *Service) findValidInviteLink(ctx context.Context, token string) (*InviteLink, error) {
+	if token == "" {
+		return nil, ErrInvitationNotFound
+	}
+
+	link, err := s.store.FindInviteLinkByTokenHash(ctx, hashToken(token))
+	if errors.Is(err, ErrNotFound) {
+		return nil, ErrInvitationNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find invite link: %w", err)
+	}
+	if link.RevokedAt != nil {
+		return nil, ErrInviteLinkRevoked
+	}
+	if time.Now().After(link.ExpiresAt) {
+		return nil, ErrInvitationExpired
+	}
+
+	return link, nil
 }
 
 func (s *Service) requireMembership(ctx context.Context, groupID, userID uuid.UUID) (*Membership, error) {

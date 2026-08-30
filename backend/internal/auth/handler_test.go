@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -18,11 +19,36 @@ import (
 	"github.com/Arifinwidy02/splitmate-backend/pkg/response"
 )
 
+type fakeSessions struct{}
+
+func (f *fakeSessions) CreateTokenPair(ctx context.Context, userID uuid.UUID) (*session.TokenPair, error) {
+	return &session.TokenPair{
+		AccessToken:      "test-access-token",
+		AccessExpiresAt:  time.Now().Add(15 * time.Minute),
+		RefreshToken:     "test-refresh-token",
+		RefreshExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+	}, nil
+}
+
+func (f *fakeSessions) RevokeRefreshToken(ctx context.Context, refreshToken string) error {
+	return nil
+}
+
+func (f *fakeSessions) RefreshAccessToken(ctx context.Context, refreshToken string) (*session.TokenPair, error) {
+	return f.CreateTokenPair(ctx, uuid.Nil)
+}
+
+func (f *fakeSessions) ParseAccessToken(token string) (uuid.UUID, error) {
+	if token != "test-access-token" {
+		return uuid.Nil, errors.New("invalid token")
+	}
+	return uuid.Nil, nil
+}
+
 func newTestHandler() (*Handler, *fakeStore) {
 	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
-	tokens := session.NewTokenService([]byte("test-secret"), session.DefaultTokenTTL)
 	svc := NewService(store)
-	return NewHandler(svc, tokens, false, nil), store
+	return NewHandler(svc, &fakeSessions{}, false, nil), store
 }
 
 func decodeError(t *testing.T, rec *httptest.ResponseRecorder) response.ErrorBody {
@@ -126,24 +152,35 @@ func TestLoginHandlerSetsCookie(t *testing.T) {
 	}
 
 	cookies := rec.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("expected 1 cookie, got %d", len(cookies))
+	if len(cookies) != 2 {
+		t.Fatalf("expected 2 cookies, got %d", len(cookies))
 	}
-	cookie := cookies[0]
-	if cookie.Name != session.CookieName {
-		t.Errorf("expected cookie name %q, got %q", session.CookieName, cookie.Name)
+	var hasAccess, hasRefresh bool
+	for _, cookie := range cookies {
+		if cookie.Value == "" {
+			t.Error("expected non-empty session token")
+		}
+		if !cookie.HttpOnly {
+			t.Error("session cookie must be HttpOnly")
+		}
+		if cookie.MaxAge <= 0 {
+			t.Errorf("expected positive MaxAge, got %d", cookie.MaxAge)
+		}
+		switch cookie.Name {
+		case session.AccessTokenCookie:
+			hasAccess = true
+			if cookie.SameSite != http.SameSiteLaxMode {
+				t.Errorf("expected access cookie SameSite Lax, got %v", cookie.SameSite)
+			}
+		case session.RefreshTokenCookie:
+			hasRefresh = true
+			if cookie.SameSite != http.SameSiteStrictMode {
+				t.Errorf("expected refresh cookie SameSite Strict, got %v", cookie.SameSite)
+			}
+		}
 	}
-	if cookie.Value == "" {
-		t.Error("expected non-empty session token")
-	}
-	if !cookie.HttpOnly {
-		t.Error("session cookie must be HttpOnly")
-	}
-	if cookie.SameSite != http.SameSiteLaxMode {
-		t.Errorf("expected SameSite Lax, got %v", cookie.SameSite)
-	}
-	if cookie.MaxAge <= 0 {
-		t.Errorf("expected positive MaxAge, got %d", cookie.MaxAge)
+	if !hasAccess || !hasRefresh {
+		t.Errorf("expected access and refresh cookies, got %v", cookies)
 	}
 }
 
@@ -176,12 +213,24 @@ func TestLogoutClearsCookie(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 
-	setCookie := rec.Header().Get("Set-Cookie")
-	if !strings.Contains(setCookie, session.CookieName+"=") {
-		t.Errorf("expected Set-Cookie for %q, got %q", session.CookieName, setCookie)
+	cookies := rec.Header()["Set-Cookie"]
+	var hasAccess, hasRefresh bool
+	for _, c := range cookies {
+		switch {
+		case strings.Contains(c, session.AccessTokenCookie+"="):
+			hasAccess = true
+		case strings.Contains(c, session.RefreshTokenCookie+"="):
+			hasRefresh = true
+		}
+		if !strings.Contains(c, "Max-Age=0") {
+			t.Errorf("expected Max-Age=0, got %q", c)
+		}
 	}
-	if !strings.Contains(setCookie, "Max-Age=0") {
-		t.Errorf("expected Max-Age=0, got %q", setCookie)
+	if !hasAccess {
+		t.Errorf("expected access token cookie to be cleared")
+	}
+	if !hasRefresh {
+		t.Errorf("expected refresh token cookie to be cleared")
 	}
 }
 
@@ -224,7 +273,6 @@ func mustHash(password string) string {
 
 func newTestOAuthHandler() (*Handler, *fakeStore) {
 	store := &fakeStore{oauthLinks: map[string]uuid.UUID{}}
-	tokens := session.NewTokenService([]byte("test-secret"), session.DefaultTokenTTL)
 	svc := NewService(store)
 	svc.google = &fakeGoogleClient{
 		profile: &GoogleProfile{ID: "google-id-1", Email: "a@b.com", Name: "Google User"},
@@ -235,7 +283,7 @@ func newTestOAuthHandler() (*Handler, *fakeStore) {
 		RedirectURL:  "http://localhost:3000/api/v1/auth/google/callback",
 		AppBaseURL:   "http://localhost:3000",
 	}
-	return NewHandler(svc, tokens, false, oauth), store
+	return NewHandler(svc, &fakeSessions{}, false, oauth), store
 }
 
 func TestGoogleLoginNotConfigured(t *testing.T) {
@@ -328,14 +376,17 @@ func TestGoogleCallbackSuccess(t *testing.T) {
 	}
 
 	cookies := rec.Result().Cookies()
-	var hasSession bool
+	var hasAccess, hasRefresh bool
 	for _, c := range cookies {
-		if c.Name == session.CookieName && c.Value != "" {
-			hasSession = true
+		switch c.Name {
+		case session.AccessTokenCookie:
+			hasAccess = c.Value != ""
+		case session.RefreshTokenCookie:
+			hasRefresh = c.Value != ""
 		}
 	}
-	if !hasSession {
-		t.Errorf("expected session cookie, got %v", cookies)
+	if !hasAccess || !hasRefresh {
+		t.Errorf("expected access and refresh cookies, got %v", cookies)
 	}
 
 	if len(store.users) != 1 || store.users[0].Email != "a@b.com" {
@@ -358,7 +409,7 @@ func TestGoogleCallbackFailureDoesNotSetSession(t *testing.T) {
 	if got := rec.Header().Get("Location"); got != "http://localhost:3000/login?google=error" {
 		t.Errorf("expected error redirect, got %q", got)
 	}
-	if strings.Contains(rec.Header().Get("Set-Cookie"), session.CookieName+"=") {
+	if strings.Contains(rec.Header().Get("Set-Cookie"), session.AccessTokenCookie+"=") {
 		t.Error("must not set a session cookie on failure")
 	}
 }

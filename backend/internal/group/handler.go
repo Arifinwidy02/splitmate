@@ -16,11 +16,12 @@ import (
 )
 
 type Handler struct {
-	service *Service
+	service      *Service
+	appBaseURL   string
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, appBaseURL string) *Handler {
+	return &Handler{service: service, appBaseURL: appBaseURL}
 }
 
 type createGroupRequest struct {
@@ -97,6 +98,32 @@ type invitationResponse struct {
 
 type invitationData struct {
 	Invitation *invitationResponse `json:"invitation"`
+}
+
+type inviteLinkData struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	URL       string    `json:"url"`
+}
+
+type groupPreviewResponse struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description"`
+	Currency    string    `json:"currency"`
+	MemberCount int       `json:"memberCount"`
+	CreatorName string    `json:"creatorName"`
+	MemberNames []string  `json:"memberNames"`
+}
+
+type groupPreviewData struct {
+	Group          *groupPreviewResponse `json:"group"`
+	ViewerIsMember bool                  `json:"viewerIsMember"`
+}
+
+type joinResultData struct {
+	Group          *groupResponse `json:"group"`
+	AlreadyMember  bool           `json:"alreadyMember"`
 }
 
 type emptyData struct{}
@@ -452,6 +479,103 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 	response.WriteJSON(w, http.StatusOK, envelope{Data: groupData{Group: toGroupResponse(g)}})
 }
 
+func (h *Handler) GetOrCreateInviteLink(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	groupID, ok := pathUUID(r, "groupId")
+	if !ok {
+		response.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid group id")
+		return
+	}
+
+	link, err := h.service.GetOrCreateInviteLink(r.Context(), userID, groupID)
+	if err != nil {
+		h.writeGroupError(w, err)
+		return
+	}
+
+	inviteURL := h.appBaseURL + "/join/" + link.Token
+	response.WriteJSON(w, http.StatusCreated, envelope{Data: inviteLinkData{
+		Token:     link.Token,
+		ExpiresAt: link.ExpiresAt,
+		URL:       inviteURL,
+	}})
+}
+
+func (h *Handler) RevokeInviteLink(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	groupID, ok := pathUUID(r, "groupId")
+	if !ok {
+		response.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid group id")
+		return
+	}
+
+	if err := h.service.RevokeInviteLink(r.Context(), userID, groupID); err != nil {
+		h.writeGroupError(w, err)
+		return
+	}
+
+	response.WriteJSON(w, http.StatusOK, envelope{Data: emptyData{}})
+}
+
+func (h *Handler) PreviewInviteLink(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+
+	var viewerID *uuid.UUID
+	if userID, ok := middleware.UserIDFromContext(r.Context()); ok {
+		viewerID = &userID
+	}
+
+	preview, isMember, err := h.service.PreviewInviteLink(r.Context(), token, viewerID)
+	if err != nil {
+		h.writeGroupError(w, err)
+		return
+	}
+
+	response.WriteJSON(w, http.StatusOK, envelope{Data: groupPreviewData{
+		Group: &groupPreviewResponse{
+			ID:          preview.GroupID,
+			Name:        preview.Name,
+			Description: preview.Description,
+			Currency:    preview.Currency,
+			MemberCount: preview.MemberCount,
+			CreatorName: preview.CreatorName,
+			MemberNames: preview.MemberNames,
+		},
+		ViewerIsMember: isMember,
+	}})
+}
+
+func (h *Handler) JoinGroupViaLink(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+
+	token := r.PathValue("token")
+
+	g, alreadyMember, err := h.service.JoinGroupViaLink(r.Context(), userID, token)
+	if err != nil {
+		h.writeGroupError(w, err)
+		return
+	}
+
+	response.WriteJSON(w, http.StatusOK, envelope{Data: joinResultData{
+		Group:         toGroupResponse(g),
+		AlreadyMember: alreadyMember,
+	}})
+}
+
 func (h *Handler) writeGroupError(w http.ResponseWriter, err error) {
 	var valErr *apperror.Validation
 	switch {
@@ -477,6 +601,10 @@ func (h *Handler) writeGroupError(w http.ResponseWriter, err error) {
 		response.WriteError(w, http.StatusConflict, "INVITATION_EXISTS", "A pending invitation already exists for this email")
 	case errors.Is(err, ErrInvitationUsed):
 		response.WriteError(w, http.StatusConflict, "INVITATION_USED", "Invitation has already been used")
+	case errors.Is(err, ErrInviteLinkRevoked):
+		response.WriteError(w, http.StatusGone, "INVITATION_REVOKED", "This invitation is no longer active")
+	case errors.Is(err, ErrInviteLinkLimit):
+		response.WriteError(w, http.StatusGone, "INVITATION_LIMIT_REACHED", "This invitation is no longer available")
 	default:
 		slog.Error("group request failed", "error", err)
 		response.WriteError(w, http.StatusInternalServerError, "INTERNAL", "Something went wrong")

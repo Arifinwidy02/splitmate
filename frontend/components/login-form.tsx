@@ -10,9 +10,11 @@ import type { Dict } from "@/lib/i18n/id";
 export default function LoginForm({
   initialError,
   dict,
+  next,
 }: {
   initialError?: string;
   dict: Dict;
+  next?: string;
 }) {
   const [state, action, pending] = useActionState<AuthActionState, FormData>(
     login,
@@ -22,6 +24,7 @@ export default function LoginForm({
   return (
     <>
       <form action={action} className="mt-6 flex flex-col gap-4">
+        <input type="hidden" name="next" value={next ?? "/dashboard"} />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="email" className="text-sm font-medium text-slate-700">
             {dict.auth.email}
@@ -73,7 +76,7 @@ export default function LoginForm({
         <p className="text-center text-sm text-slate-500">
           {dict.auth.noAccount}{" "}
           <Link
-            href="/register"
+            href={`/register${next ? `?next=${encodeURIComponent(next)}` : ""}`}
             className="font-medium text-green-600 hover:underline"
           >
             {dict.auth.createOne}
@@ -85,7 +88,7 @@ export default function LoginForm({
         {dict.common.or}
         <span className="h-px flex-1 bg-slate-200" />
       </div>
-      <GoogleButton label={dict.auth.continueWithGoogle} />
+      <GoogleButton label={dict.auth.continueWithGoogle} next={next} />
     </>
   );
 }

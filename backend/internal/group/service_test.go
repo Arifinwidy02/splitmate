@@ -22,15 +22,17 @@ type fakeStore struct {
 	members         map[uuid.UUID][]*Member
 	membership      map[string]string
 	invites         []*Invitation
+	inviteLinks     []*InviteLink
 	emails          map[uuid.UUID]string
 	failCreateGroup error
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		members:    map[uuid.UUID][]*Member{},
-		membership: map[string]string{},
-		emails:     map[uuid.UUID]string{},
+		members:     map[uuid.UUID][]*Member{},
+		membership:  map[string]string{},
+		emails:      map[uuid.UUID]string{},
+		inviteLinks: []*InviteLink{},
 	}
 }
 
@@ -235,6 +237,85 @@ func (f *fakeStore) AcceptInvitation(ctx context.Context, inv *Invitation, userI
 			i.Status = statusAccepted
 		}
 	}
+	return nil
+}
+
+func (f *fakeStore) FindActiveInviteLink(ctx context.Context, groupID uuid.UUID) (*InviteLink, error) {
+	for _, l := range f.inviteLinks {
+		if l.GroupID == groupID && l.RevokedAt == nil && l.ExpiresAt.After(time.Now()) {
+			return l, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (f *fakeStore) CreateInviteLink(ctx context.Context, link *InviteLink) error {
+	now := time.Now()
+	for _, l := range f.inviteLinks {
+		if l.GroupID == link.GroupID && l.RevokedAt == nil {
+			revoked := now
+			l.RevokedAt = &revoked
+		}
+	}
+	link.ID = uuid.New()
+	link.CreatedAt = now
+	f.inviteLinks = append(f.inviteLinks, link)
+	return nil
+}
+
+func (f *fakeStore) RevokeInviteLinks(ctx context.Context, groupID uuid.UUID) error {
+	now := time.Now()
+	for _, l := range f.inviteLinks {
+		if l.GroupID == groupID && l.RevokedAt == nil {
+			revoked := now
+			l.RevokedAt = &revoked
+		}
+	}
+	return nil
+}
+
+func (f *fakeStore) FindInviteLinkByTokenHash(ctx context.Context, tokenHash string) (*InviteLink, error) {
+	for _, l := range f.inviteLinks {
+		if l.TokenHash == tokenHash {
+			return l, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (f *fakeStore) FindGroupPreview(ctx context.Context, groupID uuid.UUID) (*GroupPreview, error) {
+	for _, g := range f.groups {
+		if g.ID != groupID {
+			continue
+		}
+		members := f.members[groupID]
+		names := make([]string, 0, len(members))
+		creatorName := ""
+		for _, m := range members {
+			names = append(names, m.Name)
+			if m.UserID == g.CreatedBy {
+				creatorName = m.Name
+			}
+		}
+		return &GroupPreview{
+			GroupID:     g.ID,
+			Name:        g.Name,
+			Description: g.Description,
+			Currency:    g.Currency,
+			MemberCount: len(members),
+			CreatorName: creatorName,
+			MemberNames: names,
+		}, nil
+	}
+	return nil, ErrNotFound
+}
+
+func (f *fakeStore) JoinViaInviteLink(ctx context.Context, link *InviteLink, userID uuid.UUID) error {
+	if _, ok := f.membership[membershipKey(link.GroupID, userID)]; ok {
+		return ErrMemberExists
+	}
+	f.addMember(link.GroupID, userID, RoleMember, time.Now())
+	link.UsedCount++
 	return nil
 }
 

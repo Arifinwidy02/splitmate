@@ -1,7 +1,6 @@
 package session
 
 import (
-	"context"
 	"testing"
 	"time"
 

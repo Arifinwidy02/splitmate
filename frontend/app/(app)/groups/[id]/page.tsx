@@ -15,7 +15,7 @@ import { CategoryIcon } from "@/components/category-icon";
 import DeleteExpenseButton from "@/components/delete-expense-button";
 import DeleteGroupButton from "@/components/delete-group-button";
 import { GroupLogo } from "@/components/group-logo";
-import InviteForm from "@/components/invite-form";
+import InviteLinkCard from "@/components/invite-link-card";
 import SettlePanel from "@/components/settle-panel";
 import Toast from "@/components/toast";
 import { getCurrentUser } from "@/lib/auth";
@@ -420,7 +420,7 @@ export default async function GroupDetailPage({
                   {dict.group.inviteMember}
                 </p>
                 <div className="mt-2">
-                  <InviteForm groupId={group.id} dict={dict} />
+                  <InviteLinkCard groupId={group.id} dict={dict} />
                 </div>
               </div>
             )}

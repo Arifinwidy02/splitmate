@@ -72,3 +72,26 @@ type Invitation struct {
 	ExpiresAt time.Time
 	CreatedAt time.Time
 }
+
+type InviteLink struct {
+	ID        uuid.UUID
+	GroupID   uuid.UUID
+	Token     string
+	TokenHash string
+	CreatedBy uuid.UUID
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+	MaxUses   *int
+	UsedCount int
+	CreatedAt time.Time
+}
+
+type GroupPreview struct {
+	GroupID     uuid.UUID
+	Name        string
+	Description *string
+	Currency    string
+	MemberCount int
+	CreatorName string
+	MemberNames []string
+}

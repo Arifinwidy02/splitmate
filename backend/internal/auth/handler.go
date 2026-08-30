@@ -1,12 +1,14 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,15 +30,24 @@ type OAuthConfig struct {
 	AppBaseURL   string
 }
 
+// sessionManager is the subset of session.Service used by the auth handler.
+// It is an interface so the handler can be tested without a database.
+type sessionManager interface {
+	CreateTokenPair(ctx context.Context, userID uuid.UUID) (*session.TokenPair, error)
+	RefreshAccessToken(ctx context.Context, refreshToken string) (*session.TokenPair, error)
+	RevokeRefreshToken(ctx context.Context, refreshToken string) error
+	ParseAccessToken(token string) (uuid.UUID, error)
+}
+
 type Handler struct {
 	service       *Service
-	session       *session.Service
+	session       sessionManager
 	secureCookies bool
 	oauth         *OAuthConfig
 }
 
-func NewHandler(service *Service, session *session.Service, secureCookies bool, oauth *OAuthConfig) *Handler {
-	return &Handler{service: service, session: session, secureCookies: secureCookies, oauth: oauth}
+func NewHandler(service *Service, sessions sessionManager, secureCookies bool, oauth *OAuthConfig) *Handler {
+	return &Handler{service: service, session: sessions, secureCookies: secureCookies, oauth: oauth}
 }
 
 type registerRequest struct {
@@ -229,6 +240,12 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Read optional `next` query param for post-login redirect
+	nextURL := r.URL.Query().Get("next")
+	if nextURL == "" || !strings.HasPrefix(nextURL, "/") {
+		nextURL = "/"
+	}
+
 	u, err := h.service.GoogleLogin(r.Context(), code, h.oauth.RedirectURL, h.oauth.ClientID, h.oauth.ClientSecret)
 	if err != nil {
 		h.redirectOAuthFailure(w, r, err.Error())
@@ -244,7 +261,7 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	h.setAccessCookie(w, tokens.AccessToken, tokens.AccessExpiresAt)
 	h.setRefreshCookie(w, tokens.RefreshToken, tokens.RefreshExpiresAt)
-	http.Redirect(w, r, h.oauth.AppBaseURL+"/", http.StatusFound)
+	http.Redirect(w, r, h.oauth.AppBaseURL+nextURL, http.StatusFound)
 }
 
 func (h *Handler) redirectOAuthFailure(w http.ResponseWriter, r *http.Request, reason string) {

@@ -70,6 +70,22 @@ export type Settlement = {
   createdAt: string;
 };
 
+export type InviteLink = {
+  token: string;
+  expiresAt: string | null;
+  url: string;
+};
+
+export type GroupPreview = {
+  id: string;
+  name: string;
+  description: string | null;
+  currency: string;
+  memberCount: number;
+  hasLogo: boolean;
+  createdAt: string;
+};
+
 export type DashboardData = {
   summary: {
     owedToUser: string;

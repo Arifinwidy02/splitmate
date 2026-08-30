@@ -6,7 +6,7 @@ import { getDict } from "@/lib/i18n";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ google?: string; success?: string }>;
+  searchParams: Promise<{ google?: string; success?: string; next?: string }>;
 }) {
   const params = await searchParams;
   const dict = await getDict();
@@ -27,7 +27,7 @@ export default async function LoginPage({
                 {dict.auth.googleFailed}
               </p>
             )}
-            <LoginForm dict={dict} />
+            <LoginForm dict={dict} next={params.next} />
           </div>
         </div>
       </main>

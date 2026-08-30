@@ -25,13 +25,13 @@ async function register(page: import("@playwright/test").Page, name: string, ema
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/dashboard");
   await expect(
     page.getByRole("heading", { name: new RegExp(`Welcome back, ${name.split(" ")[0]}`) }),
   ).toBeVisible();
 }
 
-test("complete journey: register → group → invite → expense → balance → settle", async ({
+test("complete journey: register → group → invite link → expense → balance → settle", async ({
   browser,
 }) => {
   const ownerName = "Owner";
@@ -54,24 +54,38 @@ test("complete journey: register → group → invite → expense → balance �
   await expect(owner.getByRole("heading", { name: "E2E Trip" })).toBeVisible();
   await expect(owner.locator("img[src*='/logo']")).toBeVisible();
 
-  // Invite the friend and capture the token from the UI.
+  // Create invitation link and capture it.
   const friendContext = await newContext(browser);
   const friendPage = await friendContext.newPage();
-  const friendEmailRaw = friendEmail;
-  await owner.getByLabel("Emails").fill(friendEmailRaw);
-  await owner.getByRole("button", { name: "Invite" }).click();
-  const token = await owner
-    .locator("code")
-    .filter({ hasText: /[A-Za-z0-9_-]{20,}/ })
-    .textContent();
-  expect(token).toBeTruthy();
 
-  // Friend registers and joins with the token.
-  await register(friendPage, friendName, friendEmail);
-  await friendPage.goto("/groups");
-  await friendPage.getByRole("heading", { name: "Join a group" }).scrollIntoViewIfNeeded();
-  await friendPage.getByLabel("Invitation token").fill(token ?? "");
-  await friendPage.getByRole("button", { name: "Join" }).click();
+  // Click "Create invitation link" button
+  await owner.getByRole("button", { name: "Create invitation link" }).click();
+  // Wait for the link input to appear with the generated URL - wait for value to be non-empty
+  // Use a more specific locator for the invite link input (inside the invite link card)
+  const inviteLinkCard = owner.locator('section:has-text("Invitation link")').first();
+  const linkInput = inviteLinkCard.locator('input[type="text"]');
+  await expect(linkInput).toBeVisible({ timeout: 15000 });
+  await expect.poll(async () => await linkInput.inputValue(), { timeout: 15000, intervals: [200] }).not.toBe("");
+  const inviteLink = await linkInput.inputValue();
+  expect(inviteLink).toContain("/join/");
+
+  // Friend opens the invitation link directly
+  await friendPage.goto(inviteLink);
+  // Wait for network to be idle
+  await friendPage.waitForLoadState('networkidle');
+  // Debug: print full page content
+  const pageContent = await friendPage.content();
+  console.log('Full page content:', pageContent);
+
+  // Friend registers via the "Register to join" link
+  await friendPage.getByRole("link", { name: "Register to join" }).click();
+  await expect(friendPage).toHaveURL(/\/register\?next=/);
+  await friendPage.getByLabel("Name").fill(friendName);
+  await friendPage.getByLabel("Email").fill(friendEmail);
+  await friendPage.getByLabel("Password").fill(PASSWORD);
+  await friendPage.getByRole("button", { name: "Create account" }).click();
+
+  // After registration, should redirect to /join/{token} and auto-join
   await expect(friendPage).toHaveURL(/\/groups\/[0-9a-f-]+/);
   await expect(friendPage.getByText("You joined the group.")).toBeVisible();
   await expect(friendPage.getByRole("heading", { name: "E2E Trip" })).toBeVisible();
@@ -121,6 +135,47 @@ test("complete journey: register → group → invite → expense → balance �
 
   await ownerContext.close();
   await friendContext.close();
+});
+
+test("invitation link shows preview for unauthenticated users", async ({ browser }) => {
+  const ownerName = "Owner";
+  const ownerEmail = uniqueEmail("owner");
+
+  const ownerContext = await newContext(browser);
+  const owner = await ownerContext.newPage();
+  await register(owner, ownerName, ownerEmail);
+
+  await owner.goto("/groups");
+  await owner.getByRole("link", { name: "New group" }).click();
+  await owner.getByLabel("Group name").fill("Preview Test");
+  await owner.getByRole("button", { name: "Create" }).click();
+  await expect(owner).toHaveURL(/\/groups\/[0-9a-f-]+/);
+
+  // Create invitation link
+  await owner.getByRole("button", { name: "Create invitation link" }).click();
+  const inviteLinkCard = owner.locator('section:has-text("Invitation link")').first();
+  const linkInput = inviteLinkCard.locator('input[type="text"]');
+  await expect(linkInput).toBeVisible({ timeout: 15000 });
+  await expect.poll(async () => await linkInput.inputValue(), { timeout: 15000, intervals: [200] }).not.toBe("");
+  const inviteLink = await linkInput.inputValue();
+
+  // New unauthenticated context
+  const anonContext = await newContext(browser);
+  const anonPage = await anonContext.newPage();
+
+  // Open invitation link without auth
+  await anonPage.goto(inviteLink);
+  await expect(anonPage.getByRole("heading", { name: "Preview Test" })).toBeVisible();
+  await expect(anonPage.getByText("Group preview")).toBeVisible();
+  await expect(anonPage.getByRole("link", { name: "Sign in to join" })).toBeVisible();
+  await expect(anonPage.getByRole("link", { name: "Register to join" })).toBeVisible();
+
+  // Clicking "Sign in to join" should redirect to login with next param
+  await anonPage.getByRole("link", { name: "Sign in to join" }).click();
+  await expect(anonPage).toHaveURL(/\/login\?next=/);
+
+  await ownerContext.close();
+  await anonContext.close();
 });
 
 test("group page is not found for non-members", async ({ browser }) => {

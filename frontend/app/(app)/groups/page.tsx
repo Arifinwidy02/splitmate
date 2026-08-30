@@ -5,7 +5,6 @@ import CreateGroupForm from "@/components/create-group-form";
 import DeleteGroupButton from "@/components/delete-group-button";
 import { Card, CardHeader } from "@/components/card";
 import { GroupLogo } from "@/components/group-logo";
-import JoinGroupForm from "@/components/join-group-form";
 import Toast from "@/components/toast";
 import { getCurrentUser } from "@/lib/auth";
 import { apiFetch } from "@/lib/server-api";
@@ -103,18 +102,6 @@ export default async function GroupsPage({ searchParams }: PageProps<"/groups">)
             </CardHeader>
             <div className="mt-4">
               <CreateGroupForm dict={dict} />
-            </div>
-          </Card>
-
-          <Card aria-labelledby="join-group-heading">
-            <CardHeader id="join-group-heading">
-              {dict.groups.joinGroup}
-            </CardHeader>
-            <p className="mt-1 text-sm text-slate-500">
-              {dict.groups.joinSubtitle}
-            </p>
-            <div className="mt-4">
-              <JoinGroupForm dict={dict} />
             </div>
           </Card>
         </div>

@@ -35,6 +35,12 @@ type store interface {
 	FindInvitationByTokenHash(ctx context.Context, tokenHash string) (*Invitation, error)
 	FindPendingInvitation(ctx context.Context, groupID uuid.UUID, email string) (*Invitation, error)
 	AcceptInvitation(ctx context.Context, inv *Invitation, userID uuid.UUID) error
+	FindActiveInviteLink(ctx context.Context, groupID uuid.UUID) (*InviteLink, error)
+	CreateInviteLink(ctx context.Context, link *InviteLink) error
+	RevokeInviteLinks(ctx context.Context, groupID uuid.UUID) error
+	FindInviteLinkByTokenHash(ctx context.Context, tokenHash string) (*InviteLink, error)
+	FindGroupPreview(ctx context.Context, groupID uuid.UUID) (*GroupPreview, error)
+	JoinViaInviteLink(ctx context.Context, link *InviteLink, userID uuid.UUID) error
 }
 
 type Repository struct {
@@ -584,6 +590,189 @@ func (r *Repository) AcceptInvitation(ctx context.Context, inv *Invitation, user
 		`UPDATE group_invitations SET status = 'accepted' WHERE id = $1`,
 		inv.ID.String()); err != nil {
 		return fmt.Errorf("update invitation status: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+const inviteLinkColumns = "id::text, group_id::text, token, token_hash, created_by::text, expires_at, revoked_at, max_uses, used_count, created_at"
+
+func scanInviteLink(row pgx.Row) (*InviteLink, error) {
+	var (
+		link       InviteLink
+		rawID      string
+		rawGroupID string
+		rawCreator string
+	)
+
+	if err := row.Scan(&rawID, &rawGroupID, &link.Token, &link.TokenHash, &rawCreator, &link.ExpiresAt, &link.RevokedAt, &link.MaxUses, &link.UsedCount, &link.CreatedAt); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(rawID)
+	if err != nil {
+		return nil, fmt.Errorf("parse invite link id: %w", err)
+	}
+	groupID, err := uuid.Parse(rawGroupID)
+	if err != nil {
+		return nil, fmt.Errorf("parse invite link group id: %w", err)
+	}
+	createdBy, err := uuid.Parse(rawCreator)
+	if err != nil {
+		return nil, fmt.Errorf("parse invite link creator id: %w", err)
+	}
+	link.ID = id
+	link.GroupID = groupID
+	link.CreatedBy = createdBy
+
+	return &link, nil
+}
+
+func (r *Repository) FindActiveInviteLink(ctx context.Context, groupID uuid.UUID) (*InviteLink, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT `+inviteLinkColumns+`
+		 FROM group_invite_links
+		 WHERE group_id = $1 AND revoked_at IS NULL AND expires_at > now()`,
+		groupID.String())
+
+	link, err := scanInviteLink(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find active invite link: %w", err)
+	}
+
+	return link, nil
+}
+
+func (r *Repository) CreateInviteLink(ctx context.Context, link *InviteLink) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE group_invite_links SET revoked_at = now()
+		 WHERE group_id = $1 AND revoked_at IS NULL`,
+		link.GroupID.String()); err != nil {
+		return fmt.Errorf("revoke previous invite links: %w", err)
+	}
+
+	row := tx.QueryRow(ctx,
+		`INSERT INTO group_invite_links (group_id, token, token_hash, created_by, expires_at)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING `+inviteLinkColumns,
+		link.GroupID.String(), link.Token, link.TokenHash, link.CreatedBy.String(), link.ExpiresAt)
+
+	created, err := scanInviteLink(row)
+	if err != nil {
+		return fmt.Errorf("insert invite link: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	*link = *created
+
+	return nil
+}
+
+func (r *Repository) RevokeInviteLinks(ctx context.Context, groupID uuid.UUID) error {
+	if _, err := r.pool.Exec(ctx,
+		`UPDATE group_invite_links SET revoked_at = now()
+		 WHERE group_id = $1 AND revoked_at IS NULL`,
+		groupID.String()); err != nil {
+		return fmt.Errorf("revoke invite links: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) FindInviteLinkByTokenHash(ctx context.Context, tokenHash string) (*InviteLink, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT `+inviteLinkColumns+`
+		 FROM group_invite_links
+		 WHERE token_hash = $1`,
+		tokenHash)
+
+	link, err := scanInviteLink(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find invite link by token hash: %w", err)
+	}
+
+	return link, nil
+}
+
+func (r *Repository) FindGroupPreview(ctx context.Context, groupID uuid.UUID) (*GroupPreview, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT g.id::text, g.name, g.description, g.currency,
+		        (SELECT count(*) FROM group_members gm WHERE gm.group_id = g.id),
+		        creator.name,
+		        (SELECT COALESCE(array_agg(u2.name ORDER BY gm2.joined_at), '{}'::text[])
+		         FROM group_members gm2 JOIN users u2 ON u2.id = gm2.user_id
+		         WHERE gm2.group_id = g.id)
+		 FROM groups g
+		 JOIN users creator ON creator.id = g.created_by
+		 WHERE g.id = $1`,
+		groupID.String())
+
+	var (
+		preview    GroupPreview
+		rawGroupID string
+	)
+	if err := row.Scan(&rawGroupID, &preview.Name, &preview.Description, &preview.Currency, &preview.MemberCount, &preview.CreatorName, &preview.MemberNames); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("find group preview: %w", err)
+	}
+
+	id, err := uuid.Parse(rawGroupID)
+	if err != nil {
+		return nil, fmt.Errorf("parse group id: %w", err)
+	}
+	preview.GroupID = id
+
+	return &preview, nil
+}
+
+func (r *Repository) JoinViaInviteLink(ctx context.Context, link *InviteLink, userID uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	ct, err := tx.Exec(ctx,
+		`INSERT INTO group_members (group_id, user_id, role)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (group_id, user_id) DO NOTHING`,
+		link.GroupID.String(), userID.String(), RoleMember)
+	if err != nil {
+		return fmt.Errorf("insert member: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrMemberExists
+	}
+
+	ct, err = tx.Exec(ctx,
+		`UPDATE group_invite_links SET used_count = used_count + 1
+		 WHERE id = $1 AND revoked_at IS NULL AND expires_at > now() AND (max_uses IS NULL OR used_count < max_uses)`,
+		link.ID.String())
+	if err != nil {
+		return fmt.Errorf("update invite link usage: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrInviteLinkLimit
 	}
 
 	if err := tx.Commit(ctx); err != nil {

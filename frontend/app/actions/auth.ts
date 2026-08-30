@@ -15,6 +15,14 @@ import {
 
 export type AuthActionState = { error?: string } | undefined;
 
+function getNextUrl(formData: FormData): string {
+  const next = formData.get("next");
+  if (typeof next === "string" && next.startsWith("/")) {
+    return next;
+  }
+  return "/dashboard";
+}
+
 async function storeTokensFromResponse(res: Response) {
   const setCookies = res.headers.getSetCookie();
   const cookieStore = await cookies();
@@ -79,7 +87,8 @@ export async function login(
   }
 
   await storeTokensFromResponse(res);
-  redirect("/dashboard?success=signed-in");
+  const nextUrl = getNextUrl(formData);
+  redirect(nextUrl);
 }
 
 export async function register(
@@ -104,7 +113,8 @@ export async function register(
     };
   }
 
-  redirect("/login?success=registered");
+  const nextUrl = getNextUrl(formData);
+  redirect(nextUrl);
 }
 
 export async function logout() {
