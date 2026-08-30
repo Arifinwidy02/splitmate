@@ -21,8 +21,13 @@ export async function GET(
       );
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
+    const backend = await res.json();
+    // backend shape: { data: { group: {...}, viewerIsMember } }
+    const group = backend?.data?.group;
+    if (!group) {
+      return NextResponse.json({ error: "Invalid preview response" }, { status: 500 });
+    }
+    return NextResponse.json({ preview: group });
   } catch {
     return NextResponse.json(
       { error: "Failed to fetch preview" },

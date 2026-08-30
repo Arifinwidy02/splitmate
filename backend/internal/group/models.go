@@ -94,4 +94,6 @@ type GroupPreview struct {
 	MemberCount int
 	CreatorName string
 	MemberNames []string
+	HasLogo     bool
+	CreatedAt   time.Time
 }

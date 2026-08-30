@@ -719,7 +719,9 @@ func (r *Repository) FindGroupPreview(ctx context.Context, groupID uuid.UUID) (*
 		        creator.name,
 		        (SELECT COALESCE(array_agg(u2.name ORDER BY gm2.joined_at), '{}'::text[])
 		         FROM group_members gm2 JOIN users u2 ON u2.id = gm2.user_id
-		         WHERE gm2.group_id = g.id)
+		         WHERE gm2.group_id = g.id),
+		        g.logo_image IS NOT NULL,
+		        g.created_at
 		 FROM groups g
 		 JOIN users creator ON creator.id = g.created_by
 		 WHERE g.id = $1`,
@@ -729,7 +731,7 @@ func (r *Repository) FindGroupPreview(ctx context.Context, groupID uuid.UUID) (*
 		preview    GroupPreview
 		rawGroupID string
 	)
-	if err := row.Scan(&rawGroupID, &preview.Name, &preview.Description, &preview.Currency, &preview.MemberCount, &preview.CreatorName, &preview.MemberNames); err != nil {
+	if err := row.Scan(&rawGroupID, &preview.Name, &preview.Description, &preview.Currency, &preview.MemberCount, &preview.CreatorName, &preview.MemberNames, &preview.HasLogo, &preview.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}

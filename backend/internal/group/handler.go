@@ -114,6 +114,8 @@ type groupPreviewResponse struct {
 	MemberCount int       `json:"memberCount"`
 	CreatorName string    `json:"creatorName"`
 	MemberNames []string  `json:"memberNames"`
+	HasLogo     bool      `json:"hasLogo"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type groupPreviewData struct {
@@ -550,6 +552,8 @@ func (h *Handler) PreviewInviteLink(w http.ResponseWriter, r *http.Request) {
 			MemberCount: preview.MemberCount,
 			CreatorName: preview.CreatorName,
 			MemberNames: preview.MemberNames,
+			HasLogo:     preview.HasLogo,
+			CreatedAt:   preview.CreatedAt,
 		},
 		ViewerIsMember: isMember,
 	}})
