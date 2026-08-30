@@ -66,21 +66,23 @@ export default function JoinPreviewClient({
     fetchPreview();
   }, [token, initialPreview, initialError]);
 
-  // Check auth status via preview's viewerIsMember or direct check
-  // We use a lightweight check - if preview loads and user is authed, viewerIsMember will be available via preview API
-  // For now, also check /api/v1/auth/me but don't block auto-join on it
+  // Check auth status - use server-provided initialIsAuthed as source of truth,
+  // also re-check via API for client-side navigation
   useEffect(() => {
+    if (initialIsAuthed) {
+      setIsAuthed(true);
+      return;
+    }
     fetch("/api/v1/auth/me", { credentials: "include", cache: "no-store" })
       .then((res) => {
         if (res.ok) setIsAuthed(true);
         else setIsAuthed(false);
       })
       .catch(() => setIsAuthed(false));
-  }, []);
+  }, [initialIsAuthed]);
 
-  // Auto-join: when preview is loaded, try to join if user appears authed.
-  // We use isAuthed as signal, but also fallback to trying join directly
-  // if isAuthed check is slow - the join will fail with 401 if not authed and we'll show buttons.
+  // Auto-join: try immediately when preview is loaded and user is authed.
+  // We rely on server-provided initialIsAuthed so this works right after Google login redirect.
   useEffect(() => {
     if (preview && !loading && !error && !hasAutoJoined && !joinPending && isAuthed) {
       setHasAutoJoined(true);
