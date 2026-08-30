@@ -66,7 +66,10 @@ export default function JoinPreviewClient({
   // Check auth status
   useEffect(() => {
     fetch("/api/v1/auth/me", { credentials: "include", cache: "no-store" })
-      .then(() => setIsAuthed(true))
+      .then((res) => {
+        if (res.ok) setIsAuthed(true);
+        else setIsAuthed(false);
+      })
       .catch(() => setIsAuthed(false));
   }, []);
 
