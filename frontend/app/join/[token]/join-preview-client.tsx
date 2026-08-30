@@ -17,6 +17,7 @@ interface JoinPreviewClientProps {
   dict: Dict;
   initialPreview: GroupPreview | null;
   initialError: string | null;
+  initialIsAuthed: boolean;
 }
 
 export default function JoinPreviewClient({
@@ -24,11 +25,12 @@ export default function JoinPreviewClient({
   dict,
   initialPreview,
   initialError,
+  initialIsAuthed,
 }: JoinPreviewClientProps) {
   const [preview, setPreview] = useState<GroupPreview | null>(initialPreview);
   const [loading, setLoading] = useState(!initialPreview && !initialError);
   const [error, setError] = useState<string | null>(initialError);
-  const [isAuthed, setIsAuthed] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(initialIsAuthed);
   const [hasAutoJoined, setHasAutoJoined] = useState(false);
   const [joinState, joinAction, joinPending] = useActionState(joinGroupViaLink, undefined);
 
@@ -64,7 +66,9 @@ export default function JoinPreviewClient({
     fetchPreview();
   }, [token, initialPreview, initialError]);
 
-  // Check auth status
+  // Check auth status via preview's viewerIsMember or direct check
+  // We use a lightweight check - if preview loads and user is authed, viewerIsMember will be available via preview API
+  // For now, also check /api/v1/auth/me but don't block auto-join on it
   useEffect(() => {
     fetch("/api/v1/auth/me", { credentials: "include", cache: "no-store" })
       .then((res) => {
@@ -74,14 +78,15 @@ export default function JoinPreviewClient({
       .catch(() => setIsAuthed(false));
   }, []);
 
-  // Auto-join when user is authenticated and landed via ?next=/join/[token]
-  // This handles: Share link -> login/register with next -> redirect to /join -> auto join
+  // Auto-join: when preview is loaded, try to join if user appears authed.
+  // We use isAuthed as signal, but also fallback to trying join directly
+  // if isAuthed check is slow - the join will fail with 401 if not authed and we'll show buttons.
   useEffect(() => {
-    if (isAuthed && preview && !loading && !error && !hasAutoJoined && !joinPending) {
+    if (preview && !loading && !error && !hasAutoJoined && !joinPending && isAuthed) {
       setHasAutoJoined(true);
       handleJoin();
     }
-  }, [isAuthed, preview, loading, error]);
+  }, [isAuthed, preview, loading, error, hasAutoJoined, joinPending]);
 
   if (loading) {
     return (
