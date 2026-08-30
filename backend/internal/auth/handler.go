@@ -21,6 +21,7 @@ import (
 )
 
 const oauthStateCookie = "oauth_state"
+const oauthNextCookie = "oauth_next"
 const oauthStateTTL = 10 * time.Minute
 
 type OAuthConfig struct {
@@ -212,6 +213,19 @@ func (h *Handler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 		Secure:   h.secureCookies,
 	})
 
+	// Preserve `next` param (e.g. /join/<token>) across OAuth flow via cookie
+	if next := r.URL.Query().Get("next"); next != "" && strings.HasPrefix(next, "/") {
+		http.SetCookie(w, &http.Cookie{
+			Name:     oauthNextCookie,
+			Value:    next,
+			Path:     "/",
+			MaxAge:   int(oauthStateTTL.Seconds()),
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   h.secureCookies,
+		})
+	}
+
 	http.Redirect(w, r, googleAuthURL(h.oauth.ClientID, h.oauth.RedirectURL, state), http.StatusFound)
 }
 
@@ -240,8 +254,16 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read optional `next` query param for post-login redirect
-	nextURL := r.URL.Query().Get("next")
+	// Read `next` from oauth_next cookie (set in GoogleLogin) or query param
+	nextURL := ""
+	if c, err := r.Cookie(oauthNextCookie); err == nil && c.Value != "" && strings.HasPrefix(c.Value, "/") {
+		nextURL = c.Value
+		// clear it
+		http.SetCookie(w, &http.Cookie{Name: oauthNextCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: h.secureCookies})
+	}
+	if nextURL == "" {
+		nextURL = r.URL.Query().Get("next")
+	}
 	if nextURL == "" || !strings.HasPrefix(nextURL, "/") {
 		nextURL = "/"
 	}
